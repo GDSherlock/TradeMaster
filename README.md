@@ -1,4 +1,4 @@
-# TradeCat MVP
+# TradeMaster
 
 ## 1. 项目简介（MVP 范围）
 1. 历史数据回填（HuggingFace -> TimescaleDB）
