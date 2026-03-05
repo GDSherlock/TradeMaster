@@ -1,0 +1,8 @@
+{
+  "code": "42901",
+  "msg": "rate limited",
+  "data": null,
+  "success": false,
+  "degraded": true,
+  "retry_after_ms": 1000
+}

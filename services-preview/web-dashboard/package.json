@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "contract:test": "node ./scripts/check-bff-contract.mjs"
   },
   "dependencies": {
     "@fontsource/manrope": "5.1.0",

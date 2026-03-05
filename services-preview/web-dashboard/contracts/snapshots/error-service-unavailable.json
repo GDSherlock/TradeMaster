@@ -1,0 +1,7 @@
+{
+  "code": "50001",
+  "msg": "service unavailable",
+  "data": null,
+  "success": false,
+  "degraded": true
+}

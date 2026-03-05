@@ -52,7 +52,7 @@ def signal_events(
     sql = """
     SELECT id, exchange, symbol, interval, rule_key, signal_type, direction,
            event_ts, detected_at, price, score, cooldown_seconds, detail, payload
-    FROM market_data.signal_events
+    FROM market_data_api.v_signal_events_v1
     WHERE exchange = %s
       AND (%s::bigint IS NULL OR id > %s)
       AND (%s::text IS NULL OR symbol = %s)
@@ -88,19 +88,37 @@ def signal_events_latest(
     symbol: str | None = Query(default=None),
     interval: str | None = Query(default=None),
     rule_key: str | None = Query(default=None),
+    include_ml: bool = Query(default=False),
     limit: int = Query(default=60, ge=1, le=200),
 ) -> dict:
-    sql = """
-    SELECT id, exchange, symbol, interval, rule_key, signal_type, direction,
-           event_ts, detected_at, price, score, cooldown_seconds, detail, payload
-    FROM market_data.signal_events
-    WHERE exchange = %s
-      AND (%s::text IS NULL OR symbol = %s)
-      AND (%s::text IS NULL OR interval = %s)
-      AND (%s::text IS NULL OR rule_key = %s)
-    ORDER BY id DESC
-    LIMIT %s
-    """
+    if include_ml:
+        sql = """
+        SELECT e.id, e.exchange, e.symbol, e.interval, e.rule_key, e.signal_type, e.direction,
+               e.event_ts, e.detected_at, e.price, e.score, e.cooldown_seconds, e.detail, e.payload,
+               mv.model_name, mv.model_version, mv.probability, mv.threshold, mv.decision,
+               mv.reason, mv.top_features, mv.validated_at
+        FROM market_data_api.v_signal_events_v1 e
+        LEFT JOIN market_data_api.v_signal_ml_validation_latest_v1 mv ON mv.event_id = e.id
+        WHERE e.exchange = %s
+          AND (%s::text IS NULL OR e.symbol = %s)
+          AND (%s::text IS NULL OR e.interval = %s)
+          AND (%s::text IS NULL OR e.rule_key = %s)
+        ORDER BY e.id DESC
+        LIMIT %s
+        """
+    else:
+        sql = """
+        SELECT id, exchange, symbol, interval, rule_key, signal_type, direction,
+               event_ts, detected_at, price, score, cooldown_seconds, detail, payload
+        FROM market_data_api.v_signal_events_v1
+        WHERE exchange = %s
+          AND (%s::text IS NULL OR symbol = %s)
+          AND (%s::text IS NULL OR interval = %s)
+          AND (%s::text IS NULL OR rule_key = %s)
+        ORDER BY id DESC
+        LIMIT %s
+        """
+
     with get_pool().connection() as conn:
         rows = conn.execute(
             sql,
@@ -117,7 +135,26 @@ def signal_events_latest(
         ).fetchall()
 
     response.headers["Cache-Control"] = "public,max-age=1"
-    return api_response([_event_to_api_item(dict(r)) for r in rows])
+    data = []
+    for row in rows:
+        item = _event_to_api_item(dict(row))
+        if include_ml:
+            item["ml_validation"] = (
+                {
+                    "model_name": row.get("model_name"),
+                    "model_version": row.get("model_version"),
+                    "probability": float(row.get("probability") or 0.0),
+                    "threshold": float(row.get("threshold") or 0.0),
+                    "decision": row.get("decision") or "pending",
+                    "reason": row.get("reason") or "",
+                    "top_features": list(row.get("top_features") or []),
+                    "validated_at": row.get("validated_at").isoformat() if row.get("validated_at") else None,
+                }
+                if row.get("model_version")
+                else None
+            )
+        data.append(item)
+    return api_response(data)
 
 
 @router.get("/signal/cooldown")
@@ -127,7 +164,7 @@ def signal_cooldown(limit: int = Query(default=6, ge=1, le=100)) -> dict:
       SELECT id, exchange, symbol, interval, rule_key, signal_type, direction,
              event_ts, detected_at, price, score, cooldown_seconds, detail, payload,
              ROW_NUMBER() OVER (PARTITION BY symbol, interval ORDER BY id DESC) AS rn
-      FROM market_data.signal_events
+      FROM market_data_api.v_signal_events_v1
       WHERE exchange = %s
     )
     SELECT id, exchange, symbol, interval, rule_key, signal_type, direction,
@@ -147,7 +184,7 @@ def signal_cooldown(limit: int = Query(default=6, ge=1, le=100)) -> dict:
 def signal_rules() -> dict:
     sql = """
     SELECT rule_key, enabled, priority, cooldown_seconds, params, scope_symbols, scope_intervals, updated_at
-    FROM market_data.signal_rule_configs
+    FROM market_data_api.v_signal_rule_configs_v1
     ORDER BY priority DESC, rule_key ASC
     """
     with get_pool().connection() as conn:

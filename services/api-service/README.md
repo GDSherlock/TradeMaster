@@ -4,6 +4,7 @@
 - 对外提供 REST API（行情、指标、市场统计、信号查询）。
 - 对外提供 WS 推送接口（`/ws/market`、`/ws/signal`）。
 - 负责基础鉴权（可配置开关）与 IP 限流。
+- 数据读取统一走 `market_data_api.v*_v1` 视图层，不直接依赖 producer 底表。
 
 核心路由分组：
 - `health`：`/api/health`
@@ -11,6 +12,7 @@
 - `indicator`：`/api/indicator/*`
 - `markets`：`/api/markets/*`
 - `signal`：`/api/signal/cooldown`、`/api/signal/events`、`/api/signal/events/latest`、`/api/signal/rules`
+- `ml`：`/api/ml/validation/summary`、`/api/ml/validation/candidates`、`/api/ml/validation/metrics`
 
 ## 依赖与端口
 - Python 3.12+。
@@ -57,8 +59,8 @@ cd services/api-service
 - `API_SERVICE_HOST/PORT`：监听地址。
 - `DATABASE_URL`：数据库连接串。
 - `DEFAULT_EXCHANGE`：默认交易所。
-- `AUTH_ENABLED`：是否启用鉴权。
-- `API_TOKEN`：鉴权 token（启用鉴权时生效）。
+- `AUTH_ENABLED`：是否启用鉴权（安全模板默认 `true`）。
+- `API_TOKEN`：鉴权 token（启用鉴权时必填，禁止使用 `dev-token`）。
 - `CORS_ALLOW_ORIGINS`：逗号分隔白名单。
 - `API_RATE_LIMIT_PER_MINUTE`、`API_RATE_LIMIT_BURST`：IP 限流参数。
 
@@ -70,8 +72,9 @@ cd services/api-service
 
 ```bash
 curl -fsS http://localhost:8000/api/health | jq .
-curl -fsS "http://localhost:8000/api/futures/supported-coins" | jq .
-curl -fsS "http://localhost:8000/api/indicator/list" | jq .
+export API_TOKEN='<CHANGE_ME_STRONG_TOKEN>'
+curl -fsS -H "X-API-Token: $API_TOKEN" "http://localhost:8000/api/futures/supported-coins" | jq .
+curl -fsS -H "X-API-Token: $API_TOKEN" "http://localhost:8000/api/indicator/list" | jq .
 ```
 
 WS 连通性：

@@ -9,6 +9,7 @@ SERVICES=(
   "services/api-service"
   "services/chat-service"
   "services/signal-service"
+  "services/ml-validator-service"
 )
 
 for svc in "${SERVICES[@]}"; do
@@ -24,6 +25,13 @@ for svc in "${SERVICES[@]}"; do
 done
 
 cd "$ROOT"
+echo "==> init security toolchain"
+if [ ! -d .venv-security ]; then
+  python3 -m venv .venv-security
+fi
+.venv-security/bin/pip install --upgrade pip >/dev/null
+.venv-security/bin/pip install pip-audit >/dev/null
+
 mkdir -p run/pids logs
 chmod +x scripts/*.sh
 chmod +x services-preview/web-dashboard/scripts/start.sh

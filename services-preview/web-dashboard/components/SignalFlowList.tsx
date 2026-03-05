@@ -52,6 +52,28 @@ function directionClass(direction: string): string {
   return "flat";
 }
 
+function formatMlDecision(decision: string): string {
+  switch (decision) {
+    case "passed":
+      return "ML Passed";
+    case "review":
+      return "ML Review";
+    case "rejected":
+      return "ML Rejected";
+    case "unavailable":
+      return "ML Offline";
+    default:
+      return "ML Pending";
+  }
+}
+
+function formatPercent(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+  return `${Math.round(value * 100)}%`;
+}
+
 export function SignalFlowList({ events, mode, onModeChange }: SignalFlowListProps) {
   const summary = buildSummary(events);
 
@@ -94,6 +116,30 @@ export function SignalFlowList({ events, mode, onModeChange }: SignalFlowListPro
                   </p>
                   <p className="legacy-list-meta">{event.ruleKey}</p>
                   <p className="legacy-list-detail">{event.detail || "No detail"}</p>
+                  {event.mlValidation && (
+                    <>
+                      <p className="legacy-list-detail">
+                        {formatMlDecision(event.mlValidation.decision)} · {formatPercent(event.mlValidation.probability)} · v
+                        {event.mlValidation.modelVersion || "n/a"}
+                      </p>
+                      <p className="legacy-list-detail">
+                        Threshold {formatPercent(event.mlValidation.threshold)} · {event.mlValidation.reason || "n/a"}
+                      </p>
+                      {event.mlValidation.topFeatures.length > 0 && (
+                        <details className="legacy-ml-details">
+                          <summary>Top Features</summary>
+                          <ul>
+                            {event.mlValidation.topFeatures.slice(0, 4).map((item) => (
+                              <li key={`${event.id}-${item.name}`}>
+                                <span>{item.name}</span>
+                                <span>{item.value.toFixed(4)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                    </>
+                  )}
                 </div>
                 <div className={`legacy-pill ${directionClass(event.direction)}`}>{event.direction || "neutral"}</div>
               </li>

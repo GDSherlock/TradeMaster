@@ -39,8 +39,8 @@ make stop
 - `SIGNAL_RATE_LIMIT_BURST`
 - `SYMBOLS`
 - `INTERVALS`
-- `AUTH_ENABLED`
-- `API_TOKEN`
+- `AUTH_ENABLED`（安全模板默认 `true`）
+- `API_TOKEN`（启用鉴权时必填，禁止 `dev-token`）
 
 ## 对外接口
 - `GET /signal/health`

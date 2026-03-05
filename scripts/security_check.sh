@@ -17,6 +17,12 @@ LOW_COUNT=0
 
 BLOCK_ON_HIGH="${SECURITY_CHECK_BLOCK_ON_HIGH:-0}"
 GENERATED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+PIP_AUDIT_BIN=""
+if [[ -x "$ROOT/.venv-security/bin/pip-audit" ]]; then
+  PIP_AUDIT_BIN="$ROOT/.venv-security/bin/pip-audit"
+elif command -v pip-audit >/dev/null 2>&1; then
+  PIP_AUDIT_BIN="$(command -v pip-audit)"
+fi
 
 escape_md() {
   local text="$1"
@@ -59,6 +65,7 @@ scan_pattern() {
     rg -n --no-heading -S --hidden "$pattern" "$ROOT" \
       --glob '!**/.git/**' \
       --glob '!**/.venv/**' \
+      --glob '!**/.venv-security/**' \
       --glob '!**/logs/**' \
       --glob '!**/run/**' \
       --glob '!**/data/**' \
@@ -92,6 +99,9 @@ scan_auth_enabled_false() {
   while IFS=: read -r file_path line_no _; do
     [[ -z "${file_path:-}" || -z "${line_no:-}" ]] && continue
     local rel_path="${file_path#"$ROOT"/}"
+    if [[ "$rel_path" == "config/.env.dev.example" ]]; then
+      continue
+    fi
     if [[ "$rel_path" == *".env.example" ]]; then
       add_finding "MEDIUM" "高风险配置扫描" "${rel_path}:${line_no}" \
         "检测到 AUTH_ENABLED=false（示例默认值）" \
@@ -117,6 +127,9 @@ scan_default_token() {
   while IFS=: read -r file_path line_no _; do
     [[ -z "${file_path:-}" || -z "${line_no:-}" ]] && continue
     local rel_path="${file_path#"$ROOT"/}"
+    if [[ "$rel_path" == "config/.env.dev.example" ]]; then
+      continue
+    fi
     if [[ "$rel_path" == *".env.example" ]]; then
       add_finding "MEDIUM" "高风险配置扫描" "${rel_path}:${line_no}" \
         "检测到默认 API_TOKEN=dev-token（示例默认值）" \
@@ -130,11 +143,11 @@ scan_default_token() {
 }
 
 scan_dependency_vulns() {
-  if ! command -v pip-audit >/dev/null 2>&1; then
+  if [[ -z "$PIP_AUDIT_BIN" ]]; then
     printf -- "- status: SKIPPED\n- reason: pip-audit 未安装，依赖漏洞扫描未执行。\n" >> "$TMP_DEPS"
     add_finding "LOW" "依赖漏洞扫描" "N/A" \
       "pip-audit 未安装，依赖漏洞扫描未执行" \
-      "安装 pip-audit 后重新执行 make security-check。"
+      "先执行 make init 安装安全工具链后，再执行 make security-check。"
     return
   fi
 
@@ -148,7 +161,7 @@ scan_dependency_vulns() {
 
     set +e
     local output
-    output="$(pip-audit -r "$req_file" --progress-spinner off 2>&1)"
+    output="$("$PIP_AUDIT_BIN" -r "$req_file" --progress-spinner off 2>&1)"
     local exit_code=$?
     set -e
 

@@ -43,7 +43,7 @@ def supported_coins(request: Request, response: Response):
 
     sql = """
     SELECT DISTINCT symbol
-    FROM market_data.candles_1m
+    FROM market_data_api.v_candles_1m_v1
     WHERE exchange = %s
     ORDER BY symbol
     """
@@ -81,11 +81,11 @@ def ohlc_history(
     start_dt = datetime.fromtimestamp(startTime / 1000, tz=timezone.utc) if startTime else None
     end_dt = datetime.fromtimestamp(endTime / 1000, tz=timezone.utc) if endTime else None
 
-    sql = f"""
+    sql = """
     WITH raw AS (
-      SELECT date_bin('{INTERVAL_MAP[interval]}', bucket_ts, TIMESTAMPTZ '1970-01-01') AS bucket,
+      SELECT date_bin(%s::interval, bucket_ts, TIMESTAMPTZ '1970-01-01') AS bucket,
              bucket_ts, open, high, low, close, volume, quote_volume
-      FROM market_data.candles_1m
+      FROM market_data_api.v_candles_1m_v1
       WHERE exchange = %s AND symbol = %s
         AND (%s::timestamptz IS NULL OR bucket_ts >= %s::timestamptz)
         AND (%s::timestamptz IS NULL OR bucket_ts <= %s::timestamptz)
@@ -104,7 +104,7 @@ def ohlc_history(
     """
 
     with get_pool().connection() as conn:
-        rows = conn.execute(sql, (ex, sym, start_dt, start_dt, end_dt, end_dt, limit)).fetchall()
+        rows = conn.execute(sql, (INTERVAL_MAP[interval], ex, sym, start_dt, start_dt, end_dt, end_dt, limit)).fetchall()
 
     data = [
         {

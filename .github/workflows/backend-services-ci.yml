@@ -1,0 +1,124 @@
+name: backend-services-ci
+
+on:
+  pull_request:
+    paths:
+      - "services/**"
+      - "db/migrations/**"
+      - "scripts/**"
+      - "Makefile"
+      - ".github/workflows/backend-services-ci.yml"
+  push:
+    paths:
+      - "services/**"
+      - "db/migrations/**"
+      - "scripts/**"
+      - "Makefile"
+      - ".github/workflows/backend-services-ci.yml"
+
+jobs:
+  backend-contract-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - services/api-service
+          - services/ml-validator-service
+          - services/pipeline-service
+          - services/signal-service
+          - services/chat-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        working-directory: ${{ matrix.service }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run service checks
+        working-directory: ${{ matrix.service }}
+        run: |
+          case "${{ matrix.service }}" in
+            services/api-service)
+              python -m unittest discover -s tests -p 'test_*.py'
+              ;;
+            services/ml-validator-service)
+              python -m unittest discover -s tests -p 'test_*.py'
+              ;;
+            *)
+              python -m compileall src
+              ;;
+          esac
+
+  backend-smoke-and-security:
+    runs-on: ubuntu-latest
+    services:
+      timescaledb:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: market_data
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d market_data"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Init toolchains
+        run: make init
+
+      - name: Prepare CI env
+        run: |
+          cp config/.env.example config/.env
+          sed -i 's#<CHANGE_ME_STRONG_TOKEN>#ci-strong-token-1234567890#g' config/.env
+          sed -i 's#<SAME_AS_API_TOKEN_FOR_INTERNAL_CALLS>#ci-strong-token-1234567890#g' config/.env
+          chmod 600 config/.env
+
+      - name: Init DB
+        run: make db-init
+
+      - name: Start edge services
+        run: ./scripts/devctl.sh start --group edge
+
+      - name: Smoke check
+        env:
+          API_TOKEN: ci-strong-token-1234567890
+        run: make smoke
+
+      - name: Security check
+        run: make security-check
+
+      - name: Stop services
+        if: always()
+        run: ./scripts/devctl.sh stop --group edge
+
+      - name: Upload security report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: logs/security_report.md

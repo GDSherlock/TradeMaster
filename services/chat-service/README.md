@@ -59,7 +59,7 @@ cd services/chat-service
 - `CHAT_MAX_INPUT_CHARS`：输入长度限制。
 - `CHAT_MAX_TURNS`：会话内历史轮次保留上限。
 - `API_SERVICE_BASE_URL`：上下文 API 地址。
-- `API_SERVICE_TOKEN`：调用受保护 API 时的 token。
+- `API_SERVICE_TOKEN`：调用受保护 API 时的 token（当 `AUTH_ENABLED=true` 时应与 `API_TOKEN` 保持一致）。
 - `LLM_PROVIDER`、`LLM_BASE_URL`、`LLM_MODEL`、`LLM_API_KEY`。
 - `LLM_TIMEOUT_SECONDS`、`LLM_MAX_OUTPUT_CHARS`、`CHAT_TEMPERATURE`。
 - `CHAT_AUDIT_LOG`：本地审计日志路径（默认 `logs/chat_audit.jsonl`）。

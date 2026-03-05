@@ -27,6 +27,9 @@ export function LegacyTopbar({ apiOk, dataOk, wsConnected, updatedAtLabel }: Leg
           <Activity size={14} />
           <Dot ok={apiOk} />
           <span>API: {apiOk ? "Connected" : "Unavailable"}</span>
+          <a className="legacy-nav-link" href="/ml-validation">
+            ML Validation
+          </a>
         </div>
         <div className="legacy-status-row">
           <Database size={14} />

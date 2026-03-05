@@ -17,7 +17,7 @@ ORDER_MAP = {
 BASE_CTE = """
 WITH latest AS (
     SELECT DISTINCT ON (symbol) symbol, close, bucket_ts
-    FROM market_data.candles_1m
+    FROM market_data_api.v_candles_1m_v1
     WHERE exchange = %s
     ORDER BY symbol, bucket_ts DESC
 ),
@@ -34,7 +34,7 @@ base AS (
     FROM latest l
     LEFT JOIN LATERAL (
         SELECT close
-        FROM market_data.candles_1m
+        FROM market_data_api.v_candles_1m_v1
         WHERE exchange = %s
           AND symbol = l.symbol
           AND bucket_ts <= l.bucket_ts - interval '24 hours'
@@ -43,7 +43,7 @@ base AS (
     ) p ON true
     LEFT JOIN LATERAL (
         SELECT SUM(volume) AS volume_24h, SUM(quote_volume) AS quote_volume_24h
-        FROM market_data.candles_1m
+        FROM market_data_api.v_candles_1m_v1
         WHERE exchange = %s
           AND symbol = l.symbol
           AND bucket_ts > l.bucket_ts - interval '24 hours'

@@ -16,7 +16,7 @@ from src.auth import enforce_http_auth, enforce_ws_auth
 from src.config import settings
 from src.db import get_pool
 from src.response import ErrorCode, api_response, error_response
-from src.routers import futures_router, health_router, indicator_router, markets_router, signal_router
+from src.routers import futures_router, health_router, indicator_router, markets_router, ml_router, signal_router
 
 LOG = logging.getLogger(__name__)
 
@@ -95,6 +95,7 @@ app.include_router(health_router, prefix="/api")
 app.include_router(futures_router, prefix="/api")
 app.include_router(indicator_router, prefix="/api")
 app.include_router(markets_router, prefix="/api")
+app.include_router(ml_router, prefix="/api")
 app.include_router(signal_router, prefix="/api")
 
 
@@ -104,11 +105,11 @@ def _normalize_symbol(symbol: str) -> str:
 
 
 def _fetch_latest_ohlc(symbol: str, interval: str, exchange: str) -> dict | None:
-    sql = f"""
+    sql = """
     WITH raw AS (
-      SELECT date_bin('{INTERVAL_MAP[interval]}', bucket_ts, TIMESTAMPTZ '1970-01-01') AS bucket,
+      SELECT date_bin(%s::interval, bucket_ts, TIMESTAMPTZ '1970-01-01') AS bucket,
              bucket_ts, open, high, low, close, volume, quote_volume
-      FROM market_data.candles_1m
+      FROM market_data_api.v_candles_1m_v1
       WHERE exchange = %s AND symbol = %s
       ORDER BY bucket_ts DESC
       LIMIT 500
@@ -126,7 +127,7 @@ def _fetch_latest_ohlc(symbol: str, interval: str, exchange: str) -> dict | None
     LIMIT 1
     """
     with get_pool().connection() as conn:
-        row = conn.execute(sql, (exchange, symbol)).fetchone()
+        row = conn.execute(sql, (INTERVAL_MAP[interval], exchange, symbol)).fetchone()
     if not row:
         return None
     return {
@@ -179,7 +180,7 @@ def _fetch_signal_events(
     sql = """
     SELECT id, exchange, symbol, interval, rule_key, signal_type, direction,
            event_ts, detected_at, price, score, cooldown_seconds, detail, payload
-    FROM market_data.signal_events
+    FROM market_data_api.v_signal_events_v1
     WHERE exchange = %s
       AND (%s::bigint IS NULL OR id > %s)
       AND (%s::text IS NULL OR symbol = %s)

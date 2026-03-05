@@ -61,9 +61,9 @@ def _fetch_ohlc(symbol: str, interval: str, limit: int = 400) -> pd.DataFrame:
         """
         params = (settings.default_exchange, symbol, limit)
     else:
-        sql = f"""
+        sql = """
         WITH raw AS (
-          SELECT date_bin('{INTERVAL_BIN[interval]}', bucket_ts, TIMESTAMPTZ '1970-01-01') AS ts,
+          SELECT date_bin(%s::interval, bucket_ts, TIMESTAMPTZ '1970-01-01') AS ts,
                  bucket_ts, open, high, low, close, volume, quote_volume
           FROM market_data.candles_1m
           WHERE exchange = %s AND symbol = %s
@@ -82,7 +82,7 @@ def _fetch_ohlc(symbol: str, interval: str, limit: int = 400) -> pd.DataFrame:
         ORDER BY ts DESC
         LIMIT %s
         """
-        params = (settings.default_exchange, symbol, limit * 10, limit)
+        params = (INTERVAL_BIN[interval], settings.default_exchange, symbol, limit * 10, limit)
 
     with storage.pool.connection() as conn:
         rows = conn.execute(sql, params).fetchall()

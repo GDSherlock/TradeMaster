@@ -1,0 +1,37 @@
+name: web-dashboard-ci
+
+on:
+  pull_request:
+    paths:
+      - "services-preview/web-dashboard/**"
+      - ".github/workflows/web-dashboard-ci.yml"
+  push:
+    paths:
+      - "services-preview/web-dashboard/**"
+      - ".github/workflows/web-dashboard-ci.yml"
+
+jobs:
+  web-quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services-preview/web-dashboard
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: services-preview/web-dashboard/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: BFF contract snapshot
+        run: npm run contract:test

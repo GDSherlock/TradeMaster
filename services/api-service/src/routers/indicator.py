@@ -29,7 +29,7 @@ def indicator_list(request: Request, response: Response):
 
     sql = """
     SELECT DISTINCT indicator
-    FROM market_data.indicator_values
+    FROM market_data_api.v_indicator_values_v1
     ORDER BY indicator
     """
     with get_pool().connection() as conn:
@@ -54,7 +54,7 @@ def indicator_data(
 
     sql = """
     SELECT symbol, interval, indicator, ts, payload, stale
-    FROM market_data.indicator_values
+    FROM market_data_api.v_indicator_values_v1
     WHERE indicator = %s
       AND (%s::text IS NULL OR symbol = %s)
       AND (%s::text IS NULL OR interval = %s)

@@ -1,0 +1,22 @@
+{
+  "chat_success_v1": {
+    "required": {
+      "reply": "string",
+      "session_id": "string|null",
+      "model": "string|null",
+      "timestamp_ms": "number|null"
+    }
+  },
+  "error_envelope_v1": {
+    "required": {
+      "code": "string",
+      "msg": "string",
+      "success": "boolean",
+      "data": "any|null"
+    },
+    "optional": {
+      "degraded": "boolean",
+      "retry_after_ms": "number"
+    }
+  }
+}
