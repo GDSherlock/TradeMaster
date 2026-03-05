@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+run/
+logs/
+services/*/logs/
+services/*/pids/
+services-preview/web-dashboard/logs/
+services-preview/web-dashboard/pids/
+services-preview/web-dashboard/node_modules/
+services-preview/web-dashboard/.next/
+services-preview/web-dashboard/.turbo/
+config/.env
+.env
+.DS_Store
+data/
