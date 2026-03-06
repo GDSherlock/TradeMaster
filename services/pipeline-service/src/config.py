@@ -28,6 +28,13 @@ def _float(name: str, default: float) -> float:
         return default
 
 
+def _bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _csv(name: str, default: str) -> list[str]:
     raw = os.getenv(name, default)
     return [x.strip() for x in raw.split(",") if x.strip()]
@@ -46,6 +53,11 @@ class Settings:
 
     backfill_days: int = _int("BACKFILL_DAYS", 365)
     backfill_chunk_rows: int = _int("BACKFILL_CHUNK_ROWS", 100_000)
+    backfill_db_batch_rows: int = _int("BACKFILL_DB_BATCH_ROWS", 10_000)
+    backfill_start_ts: str = os.getenv("BACKFILL_START_TS", "2020-01-01T00:00:00Z")
+    backfill_end_ts: str = os.getenv("BACKFILL_END_TS", "")
+    backfill_live_guard_minutes: int = _int("BACKFILL_LIVE_GUARD_MINUTES", 10)
+    backfill_with_indicators: bool = _bool("BACKFILL_WITH_INDICATORS", True)
     hf_dataset: str = os.getenv("HF_DATASET", "123olp/binance-futures-ohlcv-2018-2026")
     hf_candles_file: str = os.getenv("HF_CANDLES_FILE", "candles_1m.csv.gz")
 

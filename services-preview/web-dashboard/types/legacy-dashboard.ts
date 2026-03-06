@@ -214,6 +214,11 @@ export type MlRuntimeState = {
   lastProcessedEventId: number;
   lastTrainRunId: number | null;
   lastTrainAt: string | null;
+  lastTrainAttemptAt: string | null;
+  lastTrainStatus: string;
+  lastTrainError: string | null;
+  lastTrainSampleCount: number;
+  lastTrainPositiveRatio: number;
   lastDriftCheckAt: string | null;
   queueLag: number;
   queueLagScoped?: number;

@@ -5,7 +5,7 @@ import time
 from datetime import timedelta
 
 from .config import settings
-from .dataset import build_sample_for_event
+from .dataset import build_sample_for_event_with_reason, explain_drop_reason
 from .db import Database
 from .inference import predict_validation
 from .registry import load_champion_bundle
@@ -37,7 +37,7 @@ class ValidationWorker:
         processed = 0
         for event in events:
             started = time.time()
-            sample = build_sample_for_event(self.db, event, include_label=False)
+            sample, drop_reason = build_sample_for_event_with_reason(self.db, event, include_label=False)
 
             if sample is None:
                 payload = {
@@ -53,7 +53,7 @@ class ValidationWorker:
                     "probability": 0.0,
                     "threshold": settings.model_threshold_default,
                     "decision": "unavailable",
-                    "reason": "insufficient features",
+                    "reason": explain_drop_reason(drop_reason),
                     "features": {},
                     "top_features": [],
                     "validated_at": event.get("detected_at") or event["event_ts"],

@@ -98,6 +98,7 @@ export default function MlValidationPage() {
   const avgProb = Number(summary?.avg_probability ?? 0);
   const queueLag = runtime?.queueLagScoped ?? runtime?.queueLag ?? 0;
   const runtimeInterval = runtime?.runtimeInterval ?? endpoints.defaultInterval;
+  const trainStatus = runtime?.lastTrainStatus ?? "--";
 
   return (
     <main className="mlv-shell">
@@ -131,6 +132,17 @@ export default function MlValidationPage() {
         <article className="mlv-card">
           <p>7D Avg Probability</p>
           <strong>{formatNumber(avgProb * 100, 2)}%</strong>
+        </article>
+        <article className="mlv-card">
+          <p>Train Status</p>
+          <strong>{trainStatus}</strong>
+          <small className="mlv-inline-note">
+            samples: {runtime?.lastTrainSampleCount ?? 0} · pos {formatNumber((runtime?.lastTrainPositiveRatio ?? 0) * 100, 2)}%
+          </small>
+          <small className="mlv-inline-note">
+            attempt: {runtime?.lastTrainAttemptAt ?? "--"}
+          </small>
+          {runtime?.lastTrainError ? <small className="mlv-inline-note">{runtime.lastTrainError}</small> : null}
         </article>
       </section>
 

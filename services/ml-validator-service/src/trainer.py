@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -14,11 +15,12 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from .config import settings
-from .dataset import build_training_dataset
+from .dataset import DatasetBuildStats, build_training_dataset_with_stats
 from .db import Database
 from .registry import make_model_version, save_model_bundle
 
 PSI_BIN_COUNT = 5
+LOG = logging.getLogger(__name__)
 
 
 @dataclass
@@ -205,117 +207,166 @@ def _promote_decision(db: Database, candidate_metrics: dict[str, float]) -> bool
 
 
 def run_train_once(db: Database) -> TrainResult:
-    samples = build_training_dataset(db)
-    if len(samples) < settings.min_samples:
-        raise RuntimeError(f"insufficient samples: {len(samples)} < {settings.min_samples}")
-
-    rows: list[dict[str, Any]] = []
-    for s in samples:
-        row = {
-            "event_id": s.event_id,
-            "event_ts": s.event_ts,
-            "y": s.y_pass,
-        }
-        row.update(s.features)
-        rows.append(row)
-
-    df = pd.DataFrame(rows)
-    df["event_ts"] = pd.to_datetime(df["event_ts"], utc=True)
-    df = df.sort_values("event_ts").reset_index(drop=True)
-
-    train_df, val_df, test_df, windows = _split_windows(df)
-    if train_df.empty or val_df.empty or test_df.empty:
-        raise RuntimeError("insufficient split size for train/val/test")
-
-    feature_names = [c for c in df.columns if c not in {"event_id", "event_ts", "y"}]
-    x_train = train_df[feature_names]
-    y_train = train_df["y"].astype(int).to_numpy()
-    x_val = val_df[feature_names]
-    y_val = val_df["y"].astype(int).to_numpy()
-    x_test = test_df[feature_names]
-    y_test = test_df["y"].astype(int).to_numpy()
-
-    estimator = _build_base_estimator()
-    class_counts = np.bincount(y_train, minlength=2)
-
-    if int(class_counts.min()) >= 3:
-        model = CalibratedClassifierCV(estimator=estimator, method="isotonic", cv=3)
-    else:
-        model = estimator
-
-    model.fit(x_train, y_train)
-
-    y_val_score = model.predict_proba(x_val)[:, 1]
-    threshold = _choose_threshold(y_val, y_val_score)
-
-    val_metrics = _calc_metrics(y_val, y_val_score, threshold)
-    y_test_score = model.predict_proba(x_test)[:, 1]
-    test_metrics = _calc_metrics(y_test, y_test_score, threshold)
-    feature_importance = _compute_feature_importance(model, feature_names, top_k=12)
-    feature_stats = _compute_feature_stats(train_df, feature_names)
-
-    promoted = _promote_decision(db, test_metrics)
-
-    model_version = make_model_version(settings.model_name)
-    metadata = {
-        "model_name": settings.model_name,
-        "model_version": model_version,
-        "threshold": threshold,
-        "created_at": datetime.now(tz=timezone.utc).isoformat(),
-        "feature_count": len(feature_names),
-        "features_used": feature_names,
-        "coef_topk": feature_importance,
-        "feature_stats": feature_stats,
-        "val_metrics": val_metrics,
-        "test_metrics": test_metrics,
-    }
-
-    save_model_bundle(
-        model_version=model_version,
-        model=model,
-        metadata=metadata,
-        feature_names=feature_names,
+    attempt_at = datetime.now(tz=timezone.utc)
+    stats = DatasetBuildStats()
+    db.upsert_runtime_state(
+        last_train_attempt_at=attempt_at,
+        last_train_status="running",
+        last_train_error="",
+        last_train_sample_count=0,
+        last_train_positive_ratio=0.0,
     )
 
-    metrics_json = {
-        "val": val_metrics,
-        "test": test_metrics,
-    }
+    try:
+        samples, stats = build_training_dataset_with_stats(db)
+        LOG.info(
+            "training dataset built interval=%s lookback_days=%s events=%s samples=%s positive=%s negative=%s "
+            "positive_ratio=%.4f dropped_invalid=%s dropped_missing_indicator=%s dropped_recent=%s dropped_future=%s",
+            settings.interval,
+            settings.lookback_days,
+            stats.total_events,
+            stats.built_samples,
+            stats.positive_labels,
+            stats.negative_labels,
+            stats.positive_ratio,
+            stats.dropped_invalid_event,
+            stats.dropped_missing_indicator_snapshot,
+            stats.dropped_insufficient_recent_bars,
+            stats.dropped_insufficient_future_bars,
+        )
+        db.upsert_runtime_state(
+            last_train_attempt_at=attempt_at,
+            last_train_status="running",
+            last_train_error="",
+            last_train_sample_count=stats.built_samples,
+            last_train_positive_ratio=stats.positive_ratio,
+        )
 
-    run_id = db.insert_training_run(
-        {
+        if len(samples) < settings.min_samples:
+            raise RuntimeError(f"insufficient samples: {len(samples)} < {settings.min_samples}")
+
+        rows: list[dict[str, Any]] = []
+        for s in samples:
+            row = {
+                "event_id": s.event_id,
+                "event_ts": s.event_ts,
+                "y": s.y_pass,
+            }
+            row.update(s.features)
+            rows.append(row)
+
+        df = pd.DataFrame(rows)
+        df["event_ts"] = pd.to_datetime(df["event_ts"], utc=True)
+        df = df.sort_values("event_ts").reset_index(drop=True)
+
+        train_df, val_df, test_df, windows = _split_windows(df)
+        if train_df.empty or val_df.empty or test_df.empty:
+            raise RuntimeError("insufficient split size for train/val/test")
+
+        feature_names = [c for c in df.columns if c not in {"event_id", "event_ts", "y"}]
+        x_train = train_df[feature_names]
+        y_train = train_df["y"].astype(int).to_numpy()
+        x_val = val_df[feature_names]
+        y_val = val_df["y"].astype(int).to_numpy()
+        x_test = test_df[feature_names]
+        y_test = test_df["y"].astype(int).to_numpy()
+
+        estimator = _build_base_estimator()
+        class_counts = np.bincount(y_train, minlength=2)
+
+        if int(class_counts.min()) >= 3:
+            model = CalibratedClassifierCV(estimator=estimator, method="isotonic", cv=3)
+        else:
+            model = estimator
+
+        model.fit(x_train, y_train)
+
+        y_val_score = model.predict_proba(x_val)[:, 1]
+        threshold = _choose_threshold(y_val, y_val_score)
+
+        val_metrics = _calc_metrics(y_val, y_val_score, threshold)
+        y_test_score = model.predict_proba(x_test)[:, 1]
+        test_metrics = _calc_metrics(y_test, y_test_score, threshold)
+        feature_importance = _compute_feature_importance(model, feature_names, top_k=12)
+        feature_stats = _compute_feature_stats(train_df, feature_names)
+
+        promoted = _promote_decision(db, test_metrics)
+
+        model_version = make_model_version(settings.model_name)
+        metadata = {
             "model_name": settings.model_name,
             "model_version": model_version,
-            "train_start": windows["train_start"],
-            "train_end": windows["train_end"],
-            "val_start": windows["val_start"],
-            "val_end": windows["val_end"],
-            "test_start": windows["test_start"],
-            "test_end": windows["test_end"],
-            "sample_count": int(len(df)),
-            "positive_ratio": float(df["y"].mean()),
-            "threshold": float(threshold),
-            "metrics_json": metrics_json,
-            "promoted": promoted,
-            "notes": "shadow-mode training",
-            "run_type": "train",
+            "threshold": threshold,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "feature_count": len(feature_names),
             "features_used": feature_names,
-            "feature_importance": feature_importance,
+            "coef_topk": feature_importance,
+            "feature_stats": feature_stats,
+            "val_metrics": val_metrics,
+            "test_metrics": test_metrics,
         }
-    )
 
-    db.upsert_runtime_state(
-        champion_version=model_version if promoted else None,
-        last_train_run_id=run_id,
-        last_train_at=datetime.now(tz=timezone.utc),
-    )
+        save_model_bundle(
+            model_version=model_version,
+            model=model,
+            metadata=metadata,
+            feature_names=feature_names,
+        )
 
-    return TrainResult(
-        run_id=run_id,
-        model_version=model_version,
-        promoted=promoted,
-        threshold=threshold,
-        sample_count=len(df),
-        val_precision=float(val_metrics.get("precision", 0.0)),
-        test_precision=float(test_metrics.get("precision", 0.0)),
-    )
+        metrics_json = {
+            "val": val_metrics,
+            "test": test_metrics,
+        }
+
+        run_id = db.insert_training_run(
+            {
+                "model_name": settings.model_name,
+                "model_version": model_version,
+                "train_start": windows["train_start"],
+                "train_end": windows["train_end"],
+                "val_start": windows["val_start"],
+                "val_end": windows["val_end"],
+                "test_start": windows["test_start"],
+                "test_end": windows["test_end"],
+                "sample_count": int(len(df)),
+                "positive_ratio": float(df["y"].mean()),
+                "threshold": float(threshold),
+                "metrics_json": metrics_json,
+                "promoted": promoted,
+                "notes": "shadow-mode training",
+                "run_type": "train",
+                "features_used": feature_names,
+                "feature_importance": feature_importance,
+            }
+        )
+
+        db.upsert_runtime_state(
+            champion_version=model_version if promoted else None,
+            last_train_run_id=run_id,
+            last_train_at=datetime.now(tz=timezone.utc),
+            last_train_attempt_at=attempt_at,
+            last_train_status="succeeded",
+            last_train_error="",
+            last_train_sample_count=int(len(df)),
+            last_train_positive_ratio=float(df["y"].mean()),
+        )
+
+        return TrainResult(
+            run_id=run_id,
+            model_version=model_version,
+            promoted=promoted,
+            threshold=threshold,
+            sample_count=len(df),
+            val_precision=float(val_metrics.get("precision", 0.0)),
+            test_precision=float(test_metrics.get("precision", 0.0)),
+        )
+    except Exception as exc:
+        message = str(exc).strip() or exc.__class__.__name__
+        db.upsert_runtime_state(
+            last_train_attempt_at=attempt_at,
+            last_train_status="failed",
+            last_train_error=message[:500],
+            last_train_sample_count=stats.built_samples,
+            last_train_positive_ratio=stats.positive_ratio,
+        )
+        raise

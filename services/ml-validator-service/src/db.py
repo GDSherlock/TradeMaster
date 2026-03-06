@@ -18,6 +18,15 @@ INTERVAL_BIN = {
     "1d": "1 day",
 }
 
+INTERVAL_MINUTES = {
+    "1m": 1,
+    "5m": 5,
+    "15m": 15,
+    "1h": 60,
+    "4h": 240,
+    "1d": 1440,
+}
+
 REQUIRED_INDICATORS = [
     "rsi_14",
     "ema_20",
@@ -30,6 +39,15 @@ REQUIRED_INDICATORS = [
     "donchian_20",
     "ichimoku_9_26_52",
 ]
+
+
+def _raw_candle_limit(interval: str, bars: int) -> int:
+    minutes = INTERVAL_MINUTES.get(interval)
+    if minutes is None:
+        raise ValueError(f"unsupported interval: {interval}")
+    # Pull one extra bucket of 1m candles so aggregated windows have enough data
+    # for lookback/lookahead checks on intervals larger than 15m.
+    return max(1, (max(1, bars) + 1) * minutes)
 
 
 class Database:
@@ -52,7 +70,9 @@ class Database:
     def fetch_runtime_state(self) -> dict[str, Any]:
         sql = """
         SELECT id, champion_version, last_processed_event_id, last_train_run_id,
-               last_train_at, last_drift_check_at, updated_at
+               last_train_at, last_train_attempt_at, last_train_status,
+               last_train_error, last_train_sample_count, last_train_positive_ratio,
+               last_drift_check_at, updated_at
         FROM market_data.signal_ml_runtime_state
         WHERE id = 1
         """
@@ -69,6 +89,11 @@ class Database:
             "last_processed_event_id": 0,
             "last_train_run_id": None,
             "last_train_at": None,
+            "last_train_attempt_at": None,
+            "last_train_status": "never",
+            "last_train_error": "",
+            "last_train_sample_count": 0,
+            "last_train_positive_ratio": 0.0,
             "last_drift_check_at": None,
             "updated_at": None,
         }
@@ -79,20 +104,32 @@ class Database:
         last_processed_event_id: int | None = None,
         last_train_run_id: int | None = None,
         last_train_at: datetime | None = None,
+        last_train_attempt_at: datetime | None = None,
+        last_train_status: str | None = None,
+        last_train_error: str | None = None,
+        last_train_sample_count: int | None = None,
+        last_train_positive_ratio: float | None = None,
         last_drift_check_at: datetime | None = None,
     ) -> None:
         sql = """
         INSERT INTO market_data.signal_ml_runtime_state (
             id, champion_version, last_processed_event_id, last_train_run_id,
-            last_train_at, last_drift_check_at, updated_at
+            last_train_at, last_train_attempt_at, last_train_status,
+            last_train_error, last_train_sample_count, last_train_positive_ratio,
+            last_drift_check_at, updated_at
         )
-        VALUES (1, %s, COALESCE(%s, 0), %s, %s, %s, NOW())
+        VALUES (1, %s, COALESCE(%s, 0), %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (id)
         DO UPDATE SET
           champion_version = COALESCE(EXCLUDED.champion_version, market_data.signal_ml_runtime_state.champion_version),
           last_processed_event_id = COALESCE(EXCLUDED.last_processed_event_id, market_data.signal_ml_runtime_state.last_processed_event_id),
           last_train_run_id = COALESCE(EXCLUDED.last_train_run_id, market_data.signal_ml_runtime_state.last_train_run_id),
           last_train_at = COALESCE(EXCLUDED.last_train_at, market_data.signal_ml_runtime_state.last_train_at),
+          last_train_attempt_at = COALESCE(EXCLUDED.last_train_attempt_at, market_data.signal_ml_runtime_state.last_train_attempt_at),
+          last_train_status = COALESCE(EXCLUDED.last_train_status, market_data.signal_ml_runtime_state.last_train_status),
+          last_train_error = COALESCE(EXCLUDED.last_train_error, market_data.signal_ml_runtime_state.last_train_error),
+          last_train_sample_count = COALESCE(EXCLUDED.last_train_sample_count, market_data.signal_ml_runtime_state.last_train_sample_count),
+          last_train_positive_ratio = COALESCE(EXCLUDED.last_train_positive_ratio, market_data.signal_ml_runtime_state.last_train_positive_ratio),
           last_drift_check_at = COALESCE(EXCLUDED.last_drift_check_at, market_data.signal_ml_runtime_state.last_drift_check_at),
           updated_at = NOW();
         """
@@ -104,6 +141,11 @@ class Database:
                     last_processed_event_id,
                     last_train_run_id,
                     last_train_at,
+                    last_train_attempt_at,
+                    last_train_status,
+                    last_train_error,
+                    last_train_sample_count,
+                    last_train_positive_ratio,
                     last_drift_check_at,
                 ),
             )
@@ -224,6 +266,7 @@ class Database:
             params: tuple[Any, ...] = (exchange, symbol, event_ts, bars)
         else:
             bin_size = self._interval_bin(interval)
+            raw_limit = _raw_candle_limit(interval, bars)
             sql = """
             WITH raw AS (
               SELECT date_bin(%s::interval, bucket_ts, TIMESTAMPTZ '1970-01-01') AS bucket,
@@ -251,7 +294,7 @@ class Database:
             FROM agg
             ORDER BY ts ASC
             """
-            params = (bin_size, exchange, symbol, event_ts, bars * 15, bars)
+            params = (bin_size, exchange, symbol, event_ts, raw_limit, bars)
 
         with self.pool.connection() as conn:
             rows = conn.execute(sql, params).fetchall()
@@ -278,6 +321,7 @@ class Database:
             params: tuple[Any, ...] = (exchange, symbol, event_ts, bars)
         else:
             bin_size = self._interval_bin(interval)
+            raw_limit = _raw_candle_limit(interval, bars)
             sql = """
             WITH raw AS (
               SELECT date_bin(%s::interval, bucket_ts, TIMESTAMPTZ '1970-01-01') AS bucket,
@@ -305,7 +349,7 @@ class Database:
             FROM agg
             ORDER BY ts ASC
             """
-            params = (bin_size, exchange, symbol, event_ts, bars * 15, bars)
+            params = (bin_size, exchange, symbol, event_ts, raw_limit, bars)
 
         with self.pool.connection() as conn:
             rows = conn.execute(sql, params).fetchall()

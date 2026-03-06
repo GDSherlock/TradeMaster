@@ -4,6 +4,11 @@ SYMBOLS ?= BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT
 INTERVALS ?= 1m,5m,15m,1h,4h,1d
 DAYS ?= 365
 RESUME ?= 1
+START_TS ?= 2020-01-01T00:00:00Z
+END_TS ?=
+LIVE_GUARD_MINUTES ?= 10
+WITH_INDICATORS ?= 1
+DB_BATCH_ROWS ?= 10000
 TABLE ?= rsi_14
 INDICATOR_PORT ?= 9102
 
@@ -65,7 +70,7 @@ restart:
 	@./scripts/devctl.sh restart
 
 backfill:
-	@cd services/pipeline-service && .venv/bin/python -m src backfill --symbols "$(SYMBOLS)" --days "$(DAYS)" --resume "$(RESUME)"
+	@cd services/pipeline-service && .venv/bin/python -m src backfill --symbols "$(SYMBOLS)" --days "$(DAYS)" --resume "$(RESUME)" --intervals "$(INTERVALS)" --start-ts "$(START_TS)" --end-ts "$(END_TS)" --live-guard-minutes "$(LIVE_GUARD_MINUTES)" --with-indicators "$(WITH_INDICATORS)" --db-batch-rows "$(DB_BATCH_ROWS)"
 
 live:
 	@cd services/pipeline-service && .venv/bin/python -m src live --symbols "$(SYMBOLS)"

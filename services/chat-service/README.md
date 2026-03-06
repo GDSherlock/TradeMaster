@@ -1,26 +1,33 @@
 # chat-service 运维说明
 
+## 一句话说明
+`chat-service` 是 TradeMaster 的解释层：它会先读取市场上下文，再调用 LLM，把系统数据翻译成更容易理解的自然语言回答。
+
+## 它在系统里的位置
+它不是原始数据生产者，而是“解释器”。前端 Chatbox 和其他问答入口通过它把复杂市场数据转成一句一句的回答。
+
+## 非技术读者可理解的输入 / 输出
+- 输入：用户问题、市场上下文、LLM 配置。
+- 输出：文本回答、请求审计记录。
+- 你可以把它理解成“把数据库里的分析结果说成人话”。
+
 ## 服务职责
-- 提供对话接口（`POST /chat`）与健康接口（`GET /health`）。
-- 执行请求生命周期：
-- 输入校验与注入防护（`validate_message`）。
-- 通过 `api-service` 构建行情/指标上下文。
-- 调用 LLM Provider（Responses API，失败时回退 Chat Completions）。
-- 写审计日志到文件和 DB（`audit.chat_requests`）。
+- 提供 `POST /chat` 对话接口与 `GET /health` 健康接口。
+- 做输入校验和基础注入防护。
+- 从 `api-service` 拉取行情、指标、市场上下文。
+- 调用 LLM Provider，优先 Responses API，失败回退 Chat Completions。
+- 写审计日志到文件，数据库可用时同时落库到 `audit.chat_requests`。
 
 ## 依赖与端口
-- Python 3.12+。
-- 端口：`CHAT_SERVICE_PORT`（默认 `8001`）。
+- Python 3.12+
+- 默认端口：`8001`
 - 上游依赖：
-- `api-service`（上下文拉取）。
-- LLM Provider（例如 OpenAI Compatible 接口）。
-- 可选依赖：数据库（用于审计落库，`DATABASE_URL` 为空时只写文件）。
+  - `api-service`
+  - LLM Provider（OpenAI-compatible）
+- 可选依赖：数据库（用于审计落库）
 
-## 启动/停止/状态
-
-在仓库根目录执行。
-
-全链路托管（推荐）：
+## 启动、停止、状态
+全链路托管：
 
 ```bash
 make dev
@@ -28,7 +35,7 @@ make status
 make stop
 ```
 
-仅启动 chat：
+单独启动：
 
 ```bash
 make chat
@@ -41,34 +48,69 @@ cd services/chat-service
 .venv/bin/python -m src
 ```
 
-预期结果：
-- `http://localhost:8001/health` 返回 `healthy`。
-
-异常时下一步动作：
-- 查看 `logs/chat.log`。
-- 检查 `API_SERVICE_BASE_URL` 与 `LLM_*` 配置。
-
 ## 关键配置
-
 来自 `config/.env`：
 
-- `CHAT_SERVICE_HOST/PORT`：服务监听地址。
-- `CORS_ALLOW_ORIGINS`：逗号分隔 CORS 白名单（默认 `http://localhost:8088`）。
-- `CHAT_RATE_LIMIT_PER_MINUTE`：每 IP 每分钟请求配额。
-- `CHAT_MAX_CONCURRENCY_PER_IP`：每 IP 最大并发。
-- `CHAT_MAX_INPUT_CHARS`：输入长度限制。
-- `CHAT_MAX_TURNS`：会话内历史轮次保留上限。
-- `API_SERVICE_BASE_URL`：上下文 API 地址。
-- `API_SERVICE_TOKEN`：调用受保护 API 时的 token（当 `AUTH_ENABLED=true` 时应与 `API_TOKEN` 保持一致）。
-- `LLM_PROVIDER`、`LLM_BASE_URL`、`LLM_MODEL`、`LLM_API_KEY`。
-- `LLM_TIMEOUT_SECONDS`、`LLM_MAX_OUTPUT_CHARS`、`CHAT_TEMPERATURE`。
-- `CHAT_AUDIT_LOG`：本地审计日志路径（默认 `logs/chat_audit.jsonl`）。
-- `DATABASE_URL`：审计落库连接串（为空则不落库）。
+- `CHAT_SERVICE_HOST/PORT`
+- `CORS_ALLOW_ORIGINS`
+- `CHAT_RATE_LIMIT_PER_MINUTE`
+- `CHAT_MAX_CONCURRENCY_PER_IP`
+- `CHAT_MAX_INPUT_CHARS`
+- `CHAT_MAX_TURNS`
+- `API_SERVICE_BASE_URL`
+- `API_SERVICE_TOKEN`
+- `LLM_PROVIDER`
+- `LLM_BASE_URL`
+- `LLM_MODEL`
+- `LLM_API_KEY`
+- `LLM_TIMEOUT_SECONDS`
+- `LLM_MAX_OUTPUT_CHARS`
+- `CHAT_TEMPERATURE`
+- `CHAT_AUDIT_LOG`
+- `DATABASE_URL`
+
+## Chatbox LLM 配置步骤
+
+### 1) 配置 LLM 连接参数
+在仓库根目录编辑 `config/.env`：
+
+```bash
+LLM_PROVIDER=openai_compatible
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-5.2
+LLM_API_KEY=<YOUR_LLM_API_KEY>
+
+CHAT_TEMPERATURE=0.2
+LLM_TIMEOUT_SECONDS=30
+LLM_MAX_OUTPUT_CHARS=4000
+```
+
+说明：
+- `LLM_API_KEY` 为空时会回退读取 `OPENAI_API_KEY`。
+- 服务会优先调用 `POST /responses`，失败后自动回退 `POST /chat/completions`。
+
+### 2) 配置上下文 API 访问
+`chat-service` 要先访问 `api-service`，因此还需要：
+
+```bash
+AUTH_ENABLED=true
+API_TOKEN=<CHANGE_ME_STRONG_TOKEN>
+API_SERVICE_TOKEN=<SAME_AS_API_TOKEN_FOR_INTERNAL_CALLS>
+API_SERVICE_BASE_URL=http://localhost:8000
+```
+
+当 `AUTH_ENABLED=true` 时，`API_SERVICE_TOKEN` 应与 `API_TOKEN` 保持一致。
+
+### 3) 启动并验证
+```bash
+make chat
+curl -fsS http://localhost:8001/health | jq .
+curl -fsS -X POST "http://localhost:8001/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"分析一下 BTCUSDT 1h 的走势"}' | jq .
+```
 
 ## 健康检查
-
-健康接口：
-
 ```bash
 curl -fsS http://localhost:8001/health | jq .
 ```
@@ -81,26 +123,18 @@ curl -fsS -X POST "http://localhost:8001/chat" \
   -d '{"message":"分析一下 BTCUSDT 1h 的走势"}' | jq .
 ```
 
-预期结果：
-- `/health` 返回模型名与时间戳。
-- `/chat` 返回 `reply/session_id/model/timestamp_ms`。
-
-异常时下一步动作：
-- 若返回 429：检查限流配置与来源 IP 流量。
-- 若返回 `LLM_API_KEY is not configured.`：补齐 `LLM_API_KEY`。
-- 若上下文为空：检查 `api-service` 是否可达及鉴权 token 是否匹配。
-
 ## 日志与 PID
-- 进程日志：`logs/chat.log`（由 `scripts/devctl.sh` 托管时）。
-- 审计文件：`logs/chat_audit.jsonl`（或 `CHAT_AUDIT_LOG` 指定路径）。
-- PID：`run/pids/chat.pid`。
+- 日志：`logs/chat.log`
+- 分组启动日志：`logs/edge/chat-service.log`
+- 审计文件：`logs/chat_audit.jsonl`
+- PID：`run/pids/edge/chat-service.pid`
 
 快速查看：
 
 ```bash
 tail -n 100 logs/chat.log
+tail -n 100 logs/edge/chat-service.log
 tail -n 50 logs/chat_audit.jsonl
-cat run/pids/chat.pid
 ```
 
 ## 常见故障与处理
@@ -108,34 +142,33 @@ cat run/pids/chat.pid
 ### 1) LLM Key 缺失或失效
 - 现象：返回固定提示或 5xx。
 - 先做：检查 `LLM_API_KEY` 是否存在、是否过期。
-- 处理：更新 key 后重试最小请求。
+- 处理：更新 key 后重试。
 
-### 2) 上游 API 超时/不可达
-- 现象：上下文缺失，回答泛化。
-- 先做：`curl $API_SERVICE_BASE_URL/api/health` 检查可达性。
-- 处理：修复 api-service 后再验证 chat。
+### 2) 上下文 API 不可达
+- 现象：回答泛化，缺少市场细节。
+- 先做：`curl $API_SERVICE_BASE_URL/api/health`
+- 处理：修复 `api-service` 或 token 配置。
 
 ### 3) 限流触发
-- 现象：短时间内大量 429。
-- 先做：确认来源 IP 请求速率与并发。
-- 处理：降低调用频率，或按容量调整 `CHAT_RATE_LIMIT_PER_MINUTE`、`CHAT_MAX_CONCURRENCY_PER_IP`。
+- 现象：大量 429。
+- 先做：检查来源 IP 的请求频率与并发。
+- 处理：降低调用频率或调整限流参数。
 
-### 4) 回答缺少行情上下文
-- 现象：回答中提示上下文不足。
-- 先做：检查请求内容是否含 symbol/interval，或是否能被默认提取。
-- 处理：请求里显式写出如 `BTCUSDT 1h`，并检查 API 指标接口返回是否正常。
+### 4) 回答缺少上下文
+- 现象：系统提示信息不足。
+- 先做：请求中显式带上如 `BTCUSDT 1h`。
+- 处理：同时检查指标接口和行情接口是否返回正常。
 
 ## 日常巡检清单
-- 每 5 分钟：
-- `curl /health` 确认状态正常。
-- 抽样发一条低成本 `POST /chat` 请求。
-- 每小时：
-- 检查 `audit.chat_requests` 错误比例与延迟分布。
-- 检查 `chat_audit.jsonl` 是否持续写入。
-- 每日：
-- 检查 `LLM_MODEL`、`LLM_BASE_URL` 配置是否被非预期修改。
+- 每 5 分钟：检查 `/health`，抽样发 1 条低成本请求。
+- 每小时：看 `chat_audit.jsonl` 是否持续写入，错误是否异常升高。
+- 每日：确认 `LLM_MODEL`、`LLM_BASE_URL` 未被误改。
+
+## 安全提醒
+- 禁止把真实 `LLM_API_KEY` 写进仓库。
+- chat 输出只用于分析解释，不构成投资建议。
 
 ## 与其他服务依赖关系
-- 强依赖 `api-service` 作为上下文数据入口。
-- 间接依赖 `pipeline-service` 产生实时行情与指标数据。
-- 前端 `web-dashboard` 可将用户交互导向 chat-service。
+- 强依赖：`api-service`
+- 间接依赖：`pipeline-service`
+- 典型使用方：`web-dashboard`

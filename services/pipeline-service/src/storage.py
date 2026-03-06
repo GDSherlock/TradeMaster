@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
@@ -98,6 +99,15 @@ class Storage:
             conn.commit()
         return len(batch)
 
+    @contextmanager
+    def advisory_lock(self, name: str):
+        with self.pool.connection() as conn:
+            conn.execute("SELECT pg_advisory_lock(hashtext(%s))", (name,))
+            try:
+                yield
+            finally:
+                conn.execute("SELECT pg_advisory_unlock(hashtext(%s))", (name,))
+
     def fetch_latest_candle_ts(self, exchange: str, symbol: str) -> datetime | None:
         sql = """
         SELECT MAX(bucket_ts) AS latest
@@ -107,6 +117,18 @@ class Storage:
         with self.pool.connection() as conn:
             row = conn.execute(sql, (exchange, symbol)).fetchone()
         return row["latest"] if row else None
+
+    def fetch_candle_bounds(self, exchange: str, symbol: str) -> tuple[datetime | None, datetime | None]:
+        sql = """
+        SELECT MIN(bucket_ts) AS earliest, MAX(bucket_ts) AS latest
+        FROM market_data.candles_1m
+        WHERE exchange = %s AND symbol = %s
+        """
+        with self.pool.connection() as conn:
+            row = conn.execute(sql, (exchange, symbol)).fetchone()
+        if not row:
+            return None, None
+        return row["earliest"], row["latest"]
 
     def list_symbols(self, exchange: str) -> list[str]:
         sql = """

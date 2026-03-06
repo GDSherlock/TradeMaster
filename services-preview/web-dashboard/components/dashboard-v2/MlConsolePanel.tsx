@@ -102,7 +102,13 @@ export function MlConsolePanel({
         <article className="v2-pulse-card">
           <p>Last Drift Check</p>
           <strong>{runtime?.lastDriftCheckAt ? formatDateTime(runtime.lastDriftCheckAt) : "--"}</strong>
-          <span>Last train {runtime?.lastTrainAt ? formatDateTime(runtime.lastTrainAt) : "--"}</span>
+          <span>
+            Last train {runtime?.lastTrainAt ? formatDateTime(runtime.lastTrainAt) : "--"} · status {runtime?.lastTrainStatus ?? "never"}
+          </span>
+          <span>
+            Samples {runtime?.lastTrainSampleCount ?? 0} · Pos {formatPercent((runtime?.lastTrainPositiveRatio ?? 0) * 100, 2)}
+          </span>
+          {runtime?.lastTrainError ? <span>{runtime.lastTrainError}</span> : null}
         </article>
       </div>
 

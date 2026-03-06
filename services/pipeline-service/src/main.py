@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import logging
 import threading
+from datetime import datetime, timezone
 
 import uvicorn
 
@@ -29,8 +30,23 @@ def _parse_intervals(raw: str | None, fallback: list[str]) -> list[str]:
     return [x.strip().lower() for x in raw.split(",") if x.strip()]
 
 
+def _parse_optional_ts(raw: str | None) -> datetime | None:
+    if not raw or not raw.strip():
+        return None
+    normalized = raw.strip().replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def start_health_server() -> None:
-    config = uvicorn.Config("src.health:app", host=settings.pipeline_host, port=settings.pipeline_port, log_level="info")
+    config = uvicorn.Config(
+        "src.health:app",
+        host=settings.pipeline_host,
+        port=settings.pipeline_port,
+        log_level="info",
+    )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
@@ -38,7 +54,19 @@ def start_health_server() -> None:
 
 def cmd_backfill(args: argparse.Namespace) -> None:
     symbols = _parse_csv(args.symbols, settings.symbols)
-    run_backfill(symbols=symbols, days=args.days, resume=bool(args.resume), chunk_rows=settings.backfill_chunk_rows)
+    intervals = _parse_intervals(args.intervals, settings.intervals)
+    run_backfill(
+        symbols=symbols,
+        days=args.days,
+        resume=bool(args.resume),
+        chunk_rows=settings.backfill_chunk_rows,
+        start_ts=_parse_optional_ts(args.start_ts),
+        end_ts=_parse_optional_ts(args.end_ts),
+        live_guard_minutes=args.live_guard_minutes,
+        with_indicators=bool(args.with_indicators),
+        db_batch_rows=args.db_batch_rows,
+        intervals=intervals,
+    )
 
 
 def cmd_live(args: argparse.Namespace) -> None:
@@ -69,7 +97,16 @@ def cmd_all(args: argparse.Namespace) -> None:
 
     start_health_server()
     try:
-        run_backfill(symbols=symbols, days=settings.backfill_days, resume=True, chunk_rows=settings.backfill_chunk_rows)
+        run_backfill(
+            symbols=symbols,
+            days=settings.backfill_days,
+            resume=True,
+            chunk_rows=settings.backfill_chunk_rows,
+            live_guard_minutes=settings.backfill_live_guard_minutes,
+            with_indicators=False,
+            db_batch_rows=settings.backfill_db_batch_rows,
+            intervals=intervals,
+        )
     except Exception:  # noqa: BLE001
         LOG.exception("startup backfill failed, continue with live")
 
@@ -94,6 +131,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_backfill.add_argument("--symbols", type=str, default=",".join(settings.symbols))
     p_backfill.add_argument("--days", type=int, default=settings.backfill_days)
     p_backfill.add_argument("--resume", type=int, choices=[0, 1], default=1)
+    p_backfill.add_argument("--intervals", type=str, default=",".join(settings.intervals))
+    p_backfill.add_argument("--start-ts", type=str, default=settings.backfill_start_ts)
+    p_backfill.add_argument("--end-ts", type=str, default=settings.backfill_end_ts)
+    p_backfill.add_argument("--live-guard-minutes", type=int, default=settings.backfill_live_guard_minutes)
+    p_backfill.add_argument(
+        "--with-indicators",
+        type=int,
+        choices=[0, 1],
+        default=1 if settings.backfill_with_indicators else 0,
+    )
+    p_backfill.add_argument("--db-batch-rows", type=int, default=settings.backfill_db_batch_rows)
     p_backfill.set_defaults(func=cmd_backfill)
 
     p_live = sub.add_parser("live", help="run websocket live collector")

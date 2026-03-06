@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from .config import settings
 from .storage import Storage
@@ -10,14 +11,20 @@ class StateStore:
     def __init__(self, db: Storage) -> None:
         self.db = db
 
-    def get_backfill_last_ts(self, source: str, symbol: str, interval: str) -> datetime | None:
+    def get_backfill_state(self, source: str, symbol: str, interval: str) -> dict[str, Any] | None:
         sql = """
-        SELECT last_ts
+        SELECT source, symbol, interval, last_ts, status, error_message,
+               scan_chunk_index, chunk_rows, requested_start_ts, requested_end_ts,
+               rows_written, dataset_revision, updated_at
         FROM market_data.backfill_state
         WHERE source = %s AND symbol = %s AND interval = %s
         """
         with self.db.pool.connection() as conn:
             row = conn.execute(sql, (source, symbol, interval)).fetchone()
+        return dict(row) if row else None
+
+    def get_backfill_last_ts(self, source: str, symbol: str, interval: str) -> datetime | None:
+        row = self.get_backfill_state(source, symbol, interval)
         return row["last_ts"] if row else None
 
     def set_backfill_state(
@@ -28,18 +35,50 @@ class StateStore:
         last_ts: datetime | None,
         status: str,
         error_message: str | None = None,
+        scan_chunk_index: int | None = None,
+        chunk_rows: int | None = None,
+        requested_start_ts: datetime | None = None,
+        requested_end_ts: datetime | None = None,
+        rows_written: int | None = None,
+        dataset_revision: str | None = None,
     ) -> None:
         sql = """
-        INSERT INTO market_data.backfill_state (source, symbol, interval, last_ts, status, error_message, updated_at)
-        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        INSERT INTO market_data.backfill_state (
+            source, symbol, interval, last_ts, status, error_message,
+            scan_chunk_index, chunk_rows, requested_start_ts, requested_end_ts,
+            rows_written, dataset_revision, updated_at
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (source, symbol, interval)
         DO UPDATE SET last_ts = EXCLUDED.last_ts,
                       status = EXCLUDED.status,
                       error_message = EXCLUDED.error_message,
+                      scan_chunk_index = EXCLUDED.scan_chunk_index,
+                      chunk_rows = EXCLUDED.chunk_rows,
+                      requested_start_ts = EXCLUDED.requested_start_ts,
+                      requested_end_ts = EXCLUDED.requested_end_ts,
+                      rows_written = EXCLUDED.rows_written,
+                      dataset_revision = EXCLUDED.dataset_revision,
                       updated_at = NOW();
         """
         with self.db.pool.connection() as conn:
-            conn.execute(sql, (source, symbol, interval, last_ts, status, error_message))
+            conn.execute(
+                sql,
+                (
+                    source,
+                    symbol,
+                    interval,
+                    last_ts,
+                    status,
+                    error_message,
+                    scan_chunk_index,
+                    chunk_rows,
+                    requested_start_ts,
+                    requested_end_ts,
+                    rows_written,
+                    dataset_revision,
+                ),
+            )
             conn.commit()
 
     def get_indicator_last_ts(self, exchange: str, symbol: str, interval: str) -> datetime | None:

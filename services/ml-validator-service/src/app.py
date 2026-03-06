@@ -104,6 +104,11 @@ def runtime() -> dict:
         "last_processed_event_id": int(state.get("last_processed_event_id") or 0),
         "last_train_run_id": state.get("last_train_run_id"),
         "last_train_at": state.get("last_train_at").isoformat() if state.get("last_train_at") else None,
+        "last_train_attempt_at": state.get("last_train_attempt_at").isoformat() if state.get("last_train_attempt_at") else None,
+        "last_train_status": state.get("last_train_status") or "never",
+        "last_train_error": state.get("last_train_error") or None,
+        "last_train_sample_count": int(state.get("last_train_sample_count") or 0),
+        "last_train_positive_ratio": float(state.get("last_train_positive_ratio") or 0.0),
         "last_drift_check_at": state.get("last_drift_check_at").isoformat() if state.get("last_drift_check_at") else None,
         "queue_lag": lag,
     }

@@ -199,7 +199,9 @@ def validation_candidate_detail(event_id: int) -> dict:
 @router.get("/ml/runtime")
 def ml_runtime() -> dict:
     runtime_sql = """
-    SELECT champion_version, last_processed_event_id, last_train_run_id, last_train_at, last_drift_check_at
+    SELECT champion_version, last_processed_event_id, last_train_run_id, last_train_at,
+           last_train_attempt_at, last_train_status, last_train_error,
+           last_train_sample_count, last_train_positive_ratio, last_drift_check_at
     FROM market_data_api.v_signal_ml_runtime_state_v1
     WHERE id = 1
     """
@@ -228,6 +230,11 @@ def ml_runtime() -> dict:
                 "last_processed_event_id": 0,
                 "last_train_run_id": None,
                 "last_train_at": None,
+                "last_train_attempt_at": None,
+                "last_train_status": "never",
+                "last_train_error": None,
+                "last_train_sample_count": 0,
+                "last_train_positive_ratio": 0.0,
                 "last_drift_check_at": None,
                 "queue_lag": 0,
                 "queue_lag_total": 0,
@@ -247,6 +254,11 @@ def ml_runtime() -> dict:
             "last_processed_event_id": last_processed,
             "last_train_run_id": runtime.get("last_train_run_id"),
             "last_train_at": runtime["last_train_at"].isoformat() if runtime.get("last_train_at") else None,
+            "last_train_attempt_at": runtime["last_train_attempt_at"].isoformat() if runtime.get("last_train_attempt_at") else None,
+            "last_train_status": runtime.get("last_train_status") or "never",
+            "last_train_error": runtime.get("last_train_error") or None,
+            "last_train_sample_count": int(runtime.get("last_train_sample_count") or 0),
+            "last_train_positive_ratio": float(runtime.get("last_train_positive_ratio") or 0.0),
             "last_drift_check_at": runtime["last_drift_check_at"].isoformat() if runtime.get("last_drift_check_at") else None,
             "queue_lag": queue_lag_total,
             "queue_lag_total": queue_lag_total,

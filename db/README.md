@@ -1,35 +1,61 @@
-# DB 查询与数据时效性指南
+# 数据库说明与查询手册
 
-本指南面向开发与运维，覆盖 `market_data` 与 `audit` 两个 schema 的日常查询、时效性判定与巡检动作。
+这份文档同时服务两类读者：
+1. 非技术读者：先了解数据库在系统里的作用，以及主要表分别代表什么。
+2. 技术读者：继续使用后面的 SQL 查询、时效性检查和巡检动作。
+
+## 一句话说明
+数据库是 TradeMaster 的“事实底座”，所有行情、指标、信号、ML 结果和审计信息最终都落在这里。
+
+## 它在系统里的位置
+- `pipeline-service` 写入行情和指标
+- `signal-service` 写入规则信号
+- `ml-validator-service` 写入 ML 评分和训练记录
+- `chat-service` 可写入审计记录
+- `api-service` 和前端主要从这里读取结果
+
+## 非技术读者可理解的输入 / 输出
+- 输入：各服务持续写入的数据
+- 输出：给 API、前端、排障和回溯分析使用的统一数据源
+- 可以把它理解成“系统唯一可信的数据账本”
 
 ## 1. 数据模型总览
 
 ### 1.1 主数据表
-- `market_data.candles_1m`：1 分钟 K 线主表（历史回填 + 实时写入）。
-- `market_data.indicator_values`：指标结果表（EMA/MACD/RSI 等）。
-- `market_data.signal_events`：规则信号事件表。
-- `market_data.signal_rule_configs`：信号规则配置表。
+- `market_data.candles_1m`
+  - 白话说明：最原始的分钟级行情
+  - 谁在用：指标、信号、ML、图表
+- `market_data.indicator_values`
+  - 白话说明：系统算出来的技术指标结果
+  - 谁在用：signal、api、chat、ml
+- `market_data.signal_events`
+  - 白话说明：规则引擎判断出的事件记录
+  - 谁在用：前端、api、ml
+- `market_data.signal_rule_configs`
+  - 白话说明：规则开关和参数配置
+  - 谁在用：signal-service
 
 ### 1.2 状态表
-- `market_data.backfill_state`：历史回填断点与状态。
-- `market_data.indicator_state`：指标引擎每个交易对/周期的最近处理时间。
-- `market_data.ingest_heartbeat`：各采集组件心跳（`pipeline/live_ws/indicator_engine` 等）。
-- `market_data.signal_state`：信号引擎规则状态与 cooldown 状态。
+- `market_data.backfill_state`：历史回填进行到哪里、是否中断、写了多少行
+- `market_data.indicator_state`：每个币种和周期的指标处理进度
+- `market_data.ingest_heartbeat`：各组件最近一次“我还活着”的时间
+- `market_data.signal_state`：规则引擎当前状态和 cooldown 状态
 
 ### 1.3 审计表
-- `audit.chat_requests`：chat 请求审计（请求量、延迟、错误等）。
+- `audit.chat_requests`
+  - 白话说明：记录 Chatbox 的请求结果、延迟、错误
 
-### 1.4 主键/索引与推荐过滤列
-- `candles_1m` 主键：`(exchange, symbol, bucket_ts)`。
-- `indicator_values` 主键：`(exchange, symbol, interval, indicator, ts)`。
-- `signal_events` 主键：`id`（bigserial）。
-- 推荐过滤列：
-- 行情/指标查询优先带 `exchange + symbol`。
-- 指标查询带 `interval + indicator`。
-- 时间范围查询带 `bucket_ts` 或 `ts`。
+### 1.4 主键与常用过滤列
+- `candles_1m` 主键：`(exchange, symbol, bucket_ts)`
+- `indicator_values` 主键：`(exchange, symbol, interval, indicator, ts)`
+- `signal_events` 主键：`id`
 
-## 2. 连接数据库
+查询建议：
+- 看行情优先带 `exchange + symbol`
+- 看指标优先带 `symbol + interval + indicator`
+- 看时效性优先看时间列 `bucket_ts` 或 `ts`
 
+## 2. 如何连接数据库
 在仓库根目录执行：
 
 ```bash
@@ -37,7 +63,7 @@ source config/.env
 psql "$DATABASE_URL"
 ```
 
-单条执行方式：
+如果只想试一条命令：
 
 ```bash
 source config/.env
@@ -45,8 +71,12 @@ psql "$DATABASE_URL" -c "SELECT now();"
 ```
 
 ## 3. 常用查询清单
+这一节是面向运维和排障的实用查询。
 
 ### 3.1 查询某交易对最新 K 线时间
+适用场景：
+- 怀疑实时数据停了
+- 想确认某个币种有没有新行情
 
 ```sql
 SELECT
@@ -60,13 +90,14 @@ GROUP BY exchange, symbol
 ORDER BY symbol;
 ```
 
-预期结果：
-- 返回每个 symbol 的最新时间。
-
-异常时下一步：
-- 若 `latest_bucket_ts` 为空，先检查是否执行过回填，再检查实时流是否运行。
+看结果时关注：
+- `latest_bucket_ts` 是否接近当前时间
+- 是否所有目标 symbol 都有结果
 
 ### 3.2 查询指标最新记录与 stale 状态
+适用场景：
+- 想知道指标有没有算出来
+- 怀疑指标已经滞后
 
 ```sql
 SELECT
@@ -83,13 +114,14 @@ GROUP BY exchange, symbol, interval, indicator
 ORDER BY interval, indicator;
 ```
 
-预期结果：
-- 可看到每个周期/指标的最新计算时间与是否出现 stale。
-
-异常时下一步：
-- 若 `latest_ts` 停滞，检查 pipeline 指标调度与 `indicator_state`。
+看结果时关注：
+- `latest_ts` 是否还在推进
+- `any_stale` 是否异常变多
 
 ### 3.3 查询回填断点状态
+适用场景：
+- 回填被打断后，想看能否续跑
+- 想知道已经处理到哪个时间段
 
 ```sql
 SELECT
@@ -97,6 +129,11 @@ SELECT
   symbol,
   interval,
   last_ts,
+  scan_chunk_index,
+  requested_start_ts,
+  requested_end_ts,
+  rows_written,
+  dataset_revision,
   status,
   error_message,
   updated_at
@@ -105,13 +142,26 @@ ORDER BY updated_at DESC
 LIMIT 200;
 ```
 
-预期结果：
-- `status` 常见为 `running` 或 `idle`，失败时应有 `error_message`。
+看结果时关注：
+- `status`
+- `updated_at`
+- `error_message`
+- `rows_written`
 
-异常时下一步：
-- 如果 `updated_at` 长时间不变，优先排查 backfill 任务是否运行。
+### 3.4 查询 candle retention 策略
+适用场景：
+- 想确认历史数据会保留多久
 
-### 3.4 查询组件心跳
+```sql
+SELECT hypertable_name, drop_after
+FROM timescaledb_information.drop_chunks_policies
+WHERE hypertable_schema = 'market_data'
+  AND hypertable_name = 'candles_1m';
+```
+
+### 3.5 查询组件心跳
+适用场景：
+- 怀疑服务还活着但其实不工作了
 
 ```sql
 SELECT
@@ -124,13 +174,14 @@ FROM market_data.ingest_heartbeat
 ORDER BY last_seen_at DESC;
 ```
 
-预期结果：
-- 关键组件（`pipeline`、`live_ws`、`indicator_engine`）应持续刷新 `last_seen_at`。
+看结果时关注：
+- `lag_seconds` 是否持续扩大
+- `pipeline`、`live_ws`、`indicator_engine` 是否都在更新
 
-异常时下一步：
-- 若 `lag_seconds` 持续增大，检查对应进程和日志。
-
-### 3.5 查询 chat 审计最近请求与错误分布
+### 3.6 查询 chat 审计最近请求与错误分布
+适用场景：
+- Chatbox 回答不稳定
+- 想看错误是否集中在某个时间段
 
 最近请求：
 
@@ -162,13 +213,11 @@ ORDER BY 1 DESC, 2;
 ```
 
 ## 4. 数据时效性检查（2x 周期阈值）
-
-判定规则：
+白话解释：
 - `lag = now() - latest_ts`
-- 当 `lag > 2 * interval` 判定为 `LAGGING`，否则为 `OK`。
+- 如果 lag 超过 2 倍周期，就可以认为这个数据明显滞后
 
-### 4.1 K 线时效性（按 1m 周期，阈值 120 秒）
-
+### 4.1 K 线时效性
 ```sql
 WITH latest AS (
   SELECT
@@ -193,8 +242,7 @@ FROM latest
 ORDER BY lag_seconds DESC;
 ```
 
-### 4.2 指标时效性（各 interval 对应 2x 阈值）
-
+### 4.2 指标时效性
 ```sql
 WITH latest AS (
   SELECT
@@ -233,7 +281,9 @@ JOIN thresholds t USING (interval)
 ORDER BY l.symbol, t.threshold_seconds;
 ```
 
-### 4.3 批量时效检查（K 线 + 心跳联合）
+### 4.3 K 线 + 心跳联合检查
+适用场景：
+- 想快速判断是“数据没写进来”还是“服务整体停了”
 
 ```sql
 WITH candle_lag AS (
@@ -267,51 +317,26 @@ ORDER BY c.lag_seconds DESC
 LIMIT 100;
 ```
 
-判定建议：
-- 若 `candle_freshness=LAGGING` 且 `hb_lag_seconds` 同时偏大，优先判定采集链路异常。
-- 若 heartbeat 正常但数据滞后，优先检查交易对订阅与写库路径。
-
 ## 5. 运维巡检节奏
-
-### 5.1 分钟级巡检
-- 检查 `candles_1m` 最新时间是否持续前进。
-- 检查 `ingest_heartbeat` 中 `live_ws` 和 `pipeline` 的 `lag_seconds`。
-
-### 5.2 小时级巡检
-- 检查 `indicator_values` 最新时间与各 interval 滞后状态。
-- 检查 `stale=true` 比例是否异常升高。
-
-```sql
-SELECT
-  interval,
-  COUNT(*) FILTER (WHERE stale) AS stale_cnt,
-  COUNT(*) AS total_cnt,
-  ROUND(
-    100.0 * COUNT(*) FILTER (WHERE stale) / NULLIF(COUNT(*), 0),
-    2
-  ) AS stale_ratio_pct
-FROM market_data.indicator_values
-WHERE ts >= now() - interval '6 hours'
-GROUP BY interval
-ORDER BY interval;
-```
-
-### 5.3 日级巡检
-- 检查 `backfill_state` 是否有长期错误状态。
-- 检查数据保留窗口（最近 365 天策略）是否符合预期。
-- 检查 `audit.chat_requests` 错误率趋势。
+- 分钟级：看 K 线最新时间、心跳 lag
+- 小时级：看指标是否滞后、`stale` 是否升高
+- 日级：看回填异常、审计错误趋势、数据保留策略
 
 ## 6. 异常动作矩阵
-
-| 现象 | 可能原因 | 先做什么 | 下一步 |
-| --- | --- | --- | --- |
-| candles 滞后 | WS 断连、写库失败 | 查 `ingest_heartbeat` 与 pipeline 日志 | 重启 pipeline 并复查 lag |
-| indicator 滞后 | 调度未运行、上游行情滞后 | 查 `indicator_state` 与心跳 | 触发 `make indicators-once` 验证 |
-| heartbeat 正常但数据停滞 | 订阅交易对异常或过滤逻辑 | 核查 `SYMBOLS` 与写入统计 | 执行 REST fallback 验证写入 |
-| chat 审计写入失败 | DB 不可达、权限不足 | 查 `logs/chat_audit.jsonl` 与 DB 连通 | 修复 DB 后回放关键请求 |
+| 现象 | 常见原因 | 优先动作 |
+|---|---|---|
+| candles 滞后 | WS 断连、写库失败 | 查 `ingest_heartbeat` 与 pipeline 日志 |
+| indicator 滞后 | 调度未跑、上游行情停了 | 查 `indicator_state` 与 pipeline 状态 |
+| signal 为空 | 规则未启用、指标缺失 | 查 `signal_rule_configs`、`indicator_values` |
+| chat 审计异常 | LLM 或上游 API 不稳定 | 查 `audit.chat_requests` 与 chat 日志 |
 
 ## 7. 与其他服务依赖关系
-- `pipeline-service` 写入主数据与心跳，DB 是全链路上游数据源。
-- `api-service` 直接读取 `market_data` 提供前端接口。
-- `chat-service` 依赖 API 获取上下文，并写入 `audit.chat_requests`。
-- `web-dashboard` 通过 API/Chat 对外展示，数据时效由 DB + pipeline 决定。
+- `pipeline-service`：写入原始行情和指标
+- `signal-service`：写入信号事件
+- `ml-validator-service`：写入 ML 运行结果
+- `chat-service`：写入审计日志
+- `api-service` / `web-dashboard`：读取数据库结果
+
+## 安全提醒
+- 数据库是全链路共享底座，排障前先确认连接的不是错误环境。
+- 查询结果可能包含业务敏感信息，分享截图前先脱敏。
