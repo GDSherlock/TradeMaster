@@ -41,10 +41,35 @@ REQUIRED_INDICATORS = [
 ]
 
 
-def _raw_candle_limit(interval: str, bars: int) -> int:
+def _needs_revalidation(
+    model_version: str | None,
+    decision: str | None,
+    champion_version: str,
+) -> bool:
+    version = str(model_version or "").strip()
+    champion = str(champion_version or "").strip()
+    normalized_decision = str(decision or "").strip().lower()
+
+    if not version or version == "unavailable":
+        return True
+    if version != champion:
+        return True
+    return normalized_decision == "unavailable"
+
+
+def interval_minutes(interval: str) -> int:
     minutes = INTERVAL_MINUTES.get(interval)
     if minutes is None:
         raise ValueError(f"unsupported interval: {interval}")
+    return minutes
+
+
+def interval_duration(interval: str, bars: int = 1) -> timedelta:
+    return timedelta(minutes=interval_minutes(interval) * max(1, bars))
+
+
+def _raw_candle_limit(interval: str, bars: int) -> int:
+    minutes = interval_minutes(interval)
     # Pull one extra bucket of 1m candles so aggregated windows have enough data
     # for lookback/lookahead checks on intervals larger than 15m.
     return max(1, (max(1, bars) + 1) * minutes)
@@ -72,7 +97,8 @@ class Database:
         SELECT id, champion_version, last_processed_event_id, last_train_run_id,
                last_train_at, last_train_attempt_at, last_train_status,
                last_train_error, last_train_sample_count, last_train_positive_ratio,
-               last_drift_check_at, updated_at
+               last_drift_check_at, last_revalidate_at, last_revalidate_status,
+               last_revalidate_error, last_revalidate_processed_count, updated_at
         FROM market_data.signal_ml_runtime_state
         WHERE id = 1
         """
@@ -95,6 +121,10 @@ class Database:
             "last_train_sample_count": 0,
             "last_train_positive_ratio": 0.0,
             "last_drift_check_at": None,
+            "last_revalidate_at": None,
+            "last_revalidate_status": "never",
+            "last_revalidate_error": "",
+            "last_revalidate_processed_count": 0,
             "updated_at": None,
         }
 
@@ -110,45 +140,73 @@ class Database:
         last_train_sample_count: int | None = None,
         last_train_positive_ratio: float | None = None,
         last_drift_check_at: datetime | None = None,
+        last_revalidate_at: datetime | None = None,
+        last_revalidate_status: str | None = None,
+        last_revalidate_error: str | None = None,
+        last_revalidate_processed_count: int | None = None,
     ) -> None:
-        sql = """
+        update_sql = """
+        UPDATE market_data.signal_ml_runtime_state
+        SET champion_version = COALESCE(%s, champion_version),
+            last_processed_event_id = COALESCE(%s, last_processed_event_id),
+            last_train_run_id = COALESCE(%s, last_train_run_id),
+            last_train_at = COALESCE(%s, last_train_at),
+            last_train_attempt_at = COALESCE(%s, last_train_attempt_at),
+            last_train_status = COALESCE(%s, last_train_status),
+            last_train_error = COALESCE(%s, last_train_error),
+            last_train_sample_count = COALESCE(%s, last_train_sample_count),
+            last_train_positive_ratio = COALESCE(%s, last_train_positive_ratio),
+            last_drift_check_at = COALESCE(%s, last_drift_check_at),
+            last_revalidate_at = COALESCE(%s, last_revalidate_at),
+            last_revalidate_status = COALESCE(%s, last_revalidate_status),
+            last_revalidate_error = COALESCE(%s, last_revalidate_error),
+            last_revalidate_processed_count = COALESCE(%s, last_revalidate_processed_count),
+            updated_at = NOW()
+        WHERE id = 1
+        RETURNING id
+        """
+        insert_sql = """
         INSERT INTO market_data.signal_ml_runtime_state (
             id, champion_version, last_processed_event_id, last_train_run_id,
             last_train_at, last_train_attempt_at, last_train_status,
             last_train_error, last_train_sample_count, last_train_positive_ratio,
-            last_drift_check_at, updated_at
+            last_drift_check_at, last_revalidate_at, last_revalidate_status,
+            last_revalidate_error, last_revalidate_processed_count, updated_at
         )
-        VALUES (1, %s, COALESCE(%s, 0), %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-        ON CONFLICT (id)
-        DO UPDATE SET
-          champion_version = COALESCE(EXCLUDED.champion_version, market_data.signal_ml_runtime_state.champion_version),
-          last_processed_event_id = COALESCE(EXCLUDED.last_processed_event_id, market_data.signal_ml_runtime_state.last_processed_event_id),
-          last_train_run_id = COALESCE(EXCLUDED.last_train_run_id, market_data.signal_ml_runtime_state.last_train_run_id),
-          last_train_at = COALESCE(EXCLUDED.last_train_at, market_data.signal_ml_runtime_state.last_train_at),
-          last_train_attempt_at = COALESCE(EXCLUDED.last_train_attempt_at, market_data.signal_ml_runtime_state.last_train_attempt_at),
-          last_train_status = COALESCE(EXCLUDED.last_train_status, market_data.signal_ml_runtime_state.last_train_status),
-          last_train_error = COALESCE(EXCLUDED.last_train_error, market_data.signal_ml_runtime_state.last_train_error),
-          last_train_sample_count = COALESCE(EXCLUDED.last_train_sample_count, market_data.signal_ml_runtime_state.last_train_sample_count),
-          last_train_positive_ratio = COALESCE(EXCLUDED.last_train_positive_ratio, market_data.signal_ml_runtime_state.last_train_positive_ratio),
-          last_drift_check_at = COALESCE(EXCLUDED.last_drift_check_at, market_data.signal_ml_runtime_state.last_drift_check_at),
-          updated_at = NOW();
+        VALUES (
+          1, %s, COALESCE(%s, 0), %s, %s, %s,
+          COALESCE(%s, 'never'),
+          COALESCE(%s, ''),
+          COALESCE(%s, 0),
+          COALESCE(%s, 0.0),
+          %s,
+          %s,
+          COALESCE(%s, 'never'),
+          COALESCE(%s, ''),
+          COALESCE(%s, 0),
+          NOW()
+        )
         """
+        params = (
+            champion_version,
+            last_processed_event_id,
+            last_train_run_id,
+            last_train_at,
+            last_train_attempt_at,
+            last_train_status,
+            last_train_error,
+            last_train_sample_count,
+            last_train_positive_ratio,
+            last_drift_check_at,
+            last_revalidate_at,
+            last_revalidate_status,
+            last_revalidate_error,
+            last_revalidate_processed_count,
+        )
         with self.pool.connection() as conn:
-            conn.execute(
-                sql,
-                (
-                    champion_version,
-                    last_processed_event_id,
-                    last_train_run_id,
-                    last_train_at,
-                    last_train_attempt_at,
-                    last_train_status,
-                    last_train_error,
-                    last_train_sample_count,
-                    last_train_positive_ratio,
-                    last_drift_check_at,
-                ),
-            )
+            row = conn.execute(update_sql, params).fetchone()
+            if not row:
+                conn.execute(insert_sql, params)
             conn.commit()
 
     def fetch_unvalidated_rsi_events(
@@ -173,6 +231,48 @@ class Database:
         """
         with self.pool.connection() as conn:
             rows = conn.execute(sql, (exchange, interval, symbols, since_id, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+    def fetch_recent_revalidation_candidates(
+        self,
+        exchange: str,
+        interval: str,
+        symbols: list[str],
+        start_ts: datetime,
+        champion_version: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        sql = """
+        WITH latest_validation AS (
+          SELECT DISTINCT ON (event_id)
+                 event_id, model_version, decision, reason, validated_at
+          FROM market_data.signal_ml_validation
+          ORDER BY
+            event_id,
+            validated_at DESC,
+            CASE WHEN model_version IN ('', 'unavailable') THEN 1 ELSE 0 END,
+            id DESC
+        )
+        SELECT e.id, e.exchange, e.symbol, e.interval, e.rule_key, e.direction,
+               e.event_ts, e.detected_at, e.score, e.cooldown_seconds, e.payload
+        FROM market_data.signal_events e
+        LEFT JOIN latest_validation lv ON lv.event_id = e.id
+        WHERE e.exchange = %s
+          AND e.interval = %s
+          AND e.symbol = ANY(%s)
+          AND e.rule_key IN ('RSI_OVERBOUGHT', 'RSI_OVERSOLD')
+          AND e.event_ts >= %s
+          AND (
+            lv.event_id IS NULL
+            OR COALESCE(lv.model_version, '') IN ('', 'unavailable')
+            OR COALESCE(lv.model_version, '') <> %s
+            OR COALESCE(lv.decision, '') = 'unavailable'
+          )
+        ORDER BY e.event_ts DESC, e.id DESC
+        LIMIT %s
+        """
+        with self.pool.connection() as conn:
+            rows = conn.execute(sql, (exchange, interval, symbols, start_ts, champion_version, limit)).fetchall()
         return [dict(r) for r in rows]
 
     def fetch_rsi_events_for_training(

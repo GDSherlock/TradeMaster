@@ -73,6 +73,54 @@ def _event_to_candidate(row: dict) -> dict:
     }
 
 
+def _format_runtime_state(runtime: dict | None, latest_total_id: int, latest_scoped_id: int) -> dict:
+    if not runtime:
+        return {
+            "champion_version": None,
+            "last_processed_event_id": 0,
+            "last_train_run_id": None,
+            "last_train_at": None,
+            "last_train_attempt_at": None,
+            "last_train_status": "never",
+            "last_train_error": None,
+            "last_train_sample_count": 0,
+            "last_train_positive_ratio": 0.0,
+            "last_drift_check_at": None,
+            "last_revalidate_at": None,
+            "last_revalidate_status": "never",
+            "last_revalidate_error": None,
+            "last_revalidate_processed_count": 0,
+            "queue_lag": 0,
+            "queue_lag_total": 0,
+            "queue_lag_scoped": 0,
+            "runtime_interval": settings.ml_interval,
+        }
+
+    last_processed = int(runtime.get("last_processed_event_id") or 0)
+    queue_lag_total = max(0, latest_total_id - last_processed)
+    queue_lag_scoped = max(0, latest_scoped_id - last_processed)
+    return {
+        "champion_version": runtime.get("champion_version"),
+        "last_processed_event_id": last_processed,
+        "last_train_run_id": runtime.get("last_train_run_id"),
+        "last_train_at": runtime["last_train_at"].isoformat() if runtime.get("last_train_at") else None,
+        "last_train_attempt_at": runtime["last_train_attempt_at"].isoformat() if runtime.get("last_train_attempt_at") else None,
+        "last_train_status": runtime.get("last_train_status") or "never",
+        "last_train_error": runtime.get("last_train_error") or None,
+        "last_train_sample_count": int(runtime.get("last_train_sample_count") or 0),
+        "last_train_positive_ratio": float(runtime.get("last_train_positive_ratio") or 0.0),
+        "last_drift_check_at": runtime["last_drift_check_at"].isoformat() if runtime.get("last_drift_check_at") else None,
+        "last_revalidate_at": runtime["last_revalidate_at"].isoformat() if runtime.get("last_revalidate_at") else None,
+        "last_revalidate_status": runtime.get("last_revalidate_status") or "never",
+        "last_revalidate_error": runtime.get("last_revalidate_error") or None,
+        "last_revalidate_processed_count": int(runtime.get("last_revalidate_processed_count") or 0),
+        "queue_lag": queue_lag_total,
+        "queue_lag_total": queue_lag_total,
+        "queue_lag_scoped": queue_lag_scoped,
+        "runtime_interval": settings.ml_interval,
+    }
+
+
 @router.get("/ml/validation/summary")
 def validation_summary(window: str = Query(default="1d")) -> dict:
     if window not in ALLOWED_WINDOWS:
@@ -201,7 +249,9 @@ def ml_runtime() -> dict:
     runtime_sql = """
     SELECT champion_version, last_processed_event_id, last_train_run_id, last_train_at,
            last_train_attempt_at, last_train_status, last_train_error,
-           last_train_sample_count, last_train_positive_ratio, last_drift_check_at
+           last_train_sample_count, last_train_positive_ratio, last_drift_check_at,
+           last_revalidate_at, last_revalidate_status, last_revalidate_error,
+           last_revalidate_processed_count
     FROM market_data_api.v_signal_ml_runtime_state_v1
     WHERE id = 1
     """
@@ -223,49 +273,9 @@ def ml_runtime() -> dict:
         latest_total = conn.execute(latest_total_sql, (settings.default_exchange,)).fetchone()
         latest_scoped = conn.execute(latest_scoped_sql, (settings.default_exchange, settings.ml_interval)).fetchone()
 
-    if not runtime:
-        return api_response(
-            {
-                "champion_version": None,
-                "last_processed_event_id": 0,
-                "last_train_run_id": None,
-                "last_train_at": None,
-                "last_train_attempt_at": None,
-                "last_train_status": "never",
-                "last_train_error": None,
-                "last_train_sample_count": 0,
-                "last_train_positive_ratio": 0.0,
-                "last_drift_check_at": None,
-                "queue_lag": 0,
-                "queue_lag_total": 0,
-                "queue_lag_scoped": 0,
-                "runtime_interval": settings.ml_interval,
-            }
-        )
-
     latest_total_id = int((latest_total or {}).get("max_id") or 0)
     latest_scoped_id = int((latest_scoped or {}).get("max_id") or 0)
-    last_processed = int(runtime.get("last_processed_event_id") or 0)
-    queue_lag_total = max(0, latest_total_id - last_processed)
-    queue_lag_scoped = max(0, latest_scoped_id - last_processed)
-    return api_response(
-        {
-            "champion_version": runtime.get("champion_version"),
-            "last_processed_event_id": last_processed,
-            "last_train_run_id": runtime.get("last_train_run_id"),
-            "last_train_at": runtime["last_train_at"].isoformat() if runtime.get("last_train_at") else None,
-            "last_train_attempt_at": runtime["last_train_attempt_at"].isoformat() if runtime.get("last_train_attempt_at") else None,
-            "last_train_status": runtime.get("last_train_status") or "never",
-            "last_train_error": runtime.get("last_train_error") or None,
-            "last_train_sample_count": int(runtime.get("last_train_sample_count") or 0),
-            "last_train_positive_ratio": float(runtime.get("last_train_positive_ratio") or 0.0),
-            "last_drift_check_at": runtime["last_drift_check_at"].isoformat() if runtime.get("last_drift_check_at") else None,
-            "queue_lag": queue_lag_total,
-            "queue_lag_total": queue_lag_total,
-            "queue_lag_scoped": queue_lag_scoped,
-            "runtime_interval": settings.ml_interval,
-        }
-    )
+    return api_response(_format_runtime_state(dict(runtime) if runtime else None, latest_total_id, latest_scoped_id))
 
 
 @router.get("/ml/training/runs")

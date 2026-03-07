@@ -204,6 +204,12 @@ def cmd_monitor_loop(_: argparse.Namespace) -> None:
     run_monitor_loop()
 
 
+def cmd_revalidate(_: argparse.Namespace) -> None:
+    worker = ValidationWorker(db)
+    processed = worker.revalidate_recent_candidates()
+    LOG.info("ml revalidate once processed=%s", processed)
+
+
 def cmd_all(_: argparse.Namespace) -> None:
     validate_thread = threading.Thread(target=run_validate_loop, daemon=True)
     validate_thread.start()
@@ -240,6 +246,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_monitor = sub.add_parser("monitor-loop", help="run combined train/recalibrate/drift scheduler")
     p_monitor.set_defaults(func=cmd_monitor_loop)
+
+    p_revalidate = sub.add_parser("revalidate", help="revalidate recent candidates with current champion")
+    p_revalidate.add_argument("--once", action="store_true", help="run once and exit")
+    p_revalidate.set_defaults(func=cmd_revalidate)
 
     p_all = sub.add_parser("all", help="run validate loop + monitor loop + REST service")
     p_all.set_defaults(func=cmd_all)

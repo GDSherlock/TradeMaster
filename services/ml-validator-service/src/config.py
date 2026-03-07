@@ -117,6 +117,10 @@ class Settings:
     drift_lookback_hours: int = _int("ML_DRIFT_LOOKBACK_HOURS", 24)
     drift_sample_limit: int = _int("ML_DRIFT_SAMPLE_LIMIT", 2000)
     drift_min_samples: int = _int("ML_DRIFT_MIN_SAMPLES", 150)
+    revalidate_on_promotion: bool = _bool("ML_REVALIDATE_ON_PROMOTION", True)
+    revalidate_lookback_days: int = _int("ML_REVALIDATE_LOOKBACK_DAYS", 7)
+    revalidate_batch_size: int = _int("ML_REVALIDATE_BATCH_SIZE", 1000)
+    revalidate_max_batches: int = _int("ML_REVALIDATE_MAX_BATCHES", 10)
 
     def __post_init__(self) -> None:
         origins = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:8088")

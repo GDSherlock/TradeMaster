@@ -10,16 +10,21 @@ mkdir -p "$ROOT/logs"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-HEADER_ARGS=()
-if [ -n "${API_TOKEN:-}" ]; then
-  HEADER_ARGS=(-H "X-API-Token: ${API_TOKEN}")
-fi
+fetch_json() {
+  local url="$1"
+  local out="$2"
+  if [ -n "${API_TOKEN:-}" ]; then
+    curl -fsS -H "X-API-Token: ${API_TOKEN}" "$url" > "$out"
+  else
+    curl -fsS "$url" > "$out"
+  fi
+}
 
-curl -fsS "${HEADER_ARGS[@]}" "$API_BASE/ml/runtime" > "$TMP_DIR/runtime.json"
-curl -fsS "${HEADER_ARGS[@]}" "$API_BASE/ml/validation/summary?window=7d" > "$TMP_DIR/summary.json"
-curl -fsS "${HEADER_ARGS[@]}" "$API_BASE/ml/validation/metrics?window=7d" > "$TMP_DIR/metrics.json"
-curl -fsS "${HEADER_ARGS[@]}" "$API_BASE/ml/drift/latest?limit=5" > "$TMP_DIR/drift.json"
-curl -fsS "${HEADER_ARGS[@]}" "$API_BASE/ml/training/runs?limit=5" > "$TMP_DIR/runs.json"
+fetch_json "$API_BASE/ml/runtime" "$TMP_DIR/runtime.json"
+fetch_json "$API_BASE/ml/validation/summary?window=7d" "$TMP_DIR/summary.json"
+fetch_json "$API_BASE/ml/validation/metrics?window=7d" "$TMP_DIR/metrics.json"
+fetch_json "$API_BASE/ml/drift/latest?limit=5" "$TMP_DIR/drift.json"
+fetch_json "$API_BASE/ml/training/runs?limit=5" "$TMP_DIR/runs.json"
 
 python3 - "$TMP_DIR" "$REPORT" <<'PY'
 import json
@@ -54,6 +59,10 @@ lines.append(f"- champion_version: `{runtime.get('champion_version')}`")
 lines.append(f"- queue_lag: `{runtime.get('queue_lag')}`")
 lines.append(f"- last_train_at: `{runtime.get('last_train_at')}`")
 lines.append(f"- last_drift_check_at: `{runtime.get('last_drift_check_at')}`")
+lines.append(f"- last_revalidate_at: `{runtime.get('last_revalidate_at')}`")
+lines.append(f"- last_revalidate_status: `{runtime.get('last_revalidate_status')}`")
+lines.append(f"- last_revalidate_processed_count: `{runtime.get('last_revalidate_processed_count')}`")
+lines.append(f"- last_revalidate_error: `{runtime.get('last_revalidate_error')}`")
 lines.append("")
 
 lines.append("## Validation (7d)")

@@ -15,7 +15,7 @@ os.environ.setdefault("AUTH_ENABLED", "false")
 os.environ.setdefault("API_TOKEN", "dev-token")
 
 from src.response import api_response  # noqa: E402
-from src.routers.ml import _format_training_run  # noqa: E402
+from src.routers.ml import _format_runtime_state, _format_training_run  # noqa: E402
 from src.routers.signal import _event_to_api_item  # noqa: E402
 
 
@@ -119,6 +119,51 @@ class ApiContractShapeTests(unittest.TestCase):
         self.assertSetEqual(set(item.keys()), expected_keys)
         self.assertEqual(item["model_version"], "v1")
         self.assertTrue(item["promoted"])
+
+    def test_ml_runtime_shape_is_backward_compatible(self) -> None:
+        now = datetime.now(tz=timezone.utc)
+        row = {
+            "champion_version": "v2",
+            "last_processed_event_id": 100,
+            "last_train_run_id": 5,
+            "last_train_at": now,
+            "last_train_attempt_at": now,
+            "last_train_status": "succeeded",
+            "last_train_error": "",
+            "last_train_sample_count": 220,
+            "last_train_positive_ratio": 0.35,
+            "last_drift_check_at": now,
+            "last_revalidate_at": now,
+            "last_revalidate_status": "succeeded",
+            "last_revalidate_error": "",
+            "last_revalidate_processed_count": 42,
+        }
+        item = _format_runtime_state(row, latest_total_id=120, latest_scoped_id=110)
+        expected_keys = {
+            "champion_version",
+            "last_processed_event_id",
+            "last_train_run_id",
+            "last_train_at",
+            "last_train_attempt_at",
+            "last_train_status",
+            "last_train_error",
+            "last_train_sample_count",
+            "last_train_positive_ratio",
+            "last_drift_check_at",
+            "last_revalidate_at",
+            "last_revalidate_status",
+            "last_revalidate_error",
+            "last_revalidate_processed_count",
+            "queue_lag",
+            "queue_lag_total",
+            "queue_lag_scoped",
+            "runtime_interval",
+        }
+        self.assertSetEqual(set(item.keys()), expected_keys)
+        self.assertEqual(item["champion_version"], "v2")
+        self.assertEqual(item["queue_lag_total"], 20)
+        self.assertEqual(item["queue_lag_scoped"], 10)
+        self.assertEqual(item["last_revalidate_processed_count"], 42)
 
 
 if __name__ == "__main__":

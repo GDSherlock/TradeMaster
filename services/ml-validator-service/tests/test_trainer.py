@@ -5,10 +5,11 @@ import unittest
 import numpy as np
 
 try:
-    from src.trainer import _choose_threshold, _compute_feature_stats
+    from src.trainer import _choose_threshold, _compute_feature_stats, _require_binary_labels
 except ModuleNotFoundError:  # pragma: no cover - optional dependency in local env
     _choose_threshold = None
     _compute_feature_stats = None
+    _require_binary_labels = None
 
 
 @unittest.skipIf(_choose_threshold is None, "trainer dependencies are not installed in current environment")
@@ -33,6 +34,10 @@ class TestTrainer(unittest.TestCase):
         self.assertIn("f1", stats)
         self.assertIn("bins", stats["f1"])
         self.assertGreaterEqual(len(stats["f1"]["bins"]), 3)
+
+    def test_require_binary_labels_rejects_single_class(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "single-class train split"):
+            _require_binary_labels("train split", np.array([1, 1, 1], dtype=int))
 
 
 if __name__ == "__main__":

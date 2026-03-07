@@ -110,6 +110,10 @@ def runtime() -> dict:
         "last_train_sample_count": int(state.get("last_train_sample_count") or 0),
         "last_train_positive_ratio": float(state.get("last_train_positive_ratio") or 0.0),
         "last_drift_check_at": state.get("last_drift_check_at").isoformat() if state.get("last_drift_check_at") else None,
+        "last_revalidate_at": state.get("last_revalidate_at").isoformat() if state.get("last_revalidate_at") else None,
+        "last_revalidate_status": state.get("last_revalidate_status") or "never",
+        "last_revalidate_error": state.get("last_revalidate_error") or None,
+        "last_revalidate_processed_count": int(state.get("last_revalidate_processed_count") or 0),
         "queue_lag": lag,
     }
     return api_response(data)

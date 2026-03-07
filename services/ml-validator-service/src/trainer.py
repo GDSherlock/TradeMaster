@@ -34,6 +34,23 @@ class TrainResult:
     test_precision: float
 
 
+def _label_counts(values: np.ndarray) -> dict[int, int]:
+    unique, counts = np.unique(values.astype(int), return_counts=True)
+    return {int(label): int(count) for label, count in zip(unique, counts)}
+
+
+def _split_positive_ratio(frame: pd.DataFrame) -> float:
+    if frame.empty:
+        return 0.0
+    return float(frame["y"].astype(int).mean())
+
+
+def _require_binary_labels(name: str, values: np.ndarray) -> None:
+    counts = _label_counts(values)
+    if len(counts) < 2:
+        raise RuntimeError(f"single-class {name}: labels={counts}")
+
+
 def _build_base_estimator() -> Pipeline:
     return Pipeline(
         steps=[
@@ -258,8 +275,23 @@ def run_train_once(db: Database) -> TrainResult:
         df = pd.DataFrame(rows)
         df["event_ts"] = pd.to_datetime(df["event_ts"], utc=True)
         df = df.sort_values("event_ts").reset_index(drop=True)
+        y_all = df["y"].astype(int).to_numpy()
+        _require_binary_labels("dataset", y_all)
 
         train_df, val_df, test_df, windows = _split_windows(df)
+        LOG.info(
+            "training split built train=%s val=%s test=%s train_pos=%.4f val_pos=%.4f test_pos=%.4f "
+            "train_labels=%s val_labels=%s test_labels=%s",
+            len(train_df),
+            len(val_df),
+            len(test_df),
+            _split_positive_ratio(train_df),
+            _split_positive_ratio(val_df),
+            _split_positive_ratio(test_df),
+            _label_counts(train_df["y"].astype(int).to_numpy()) if not train_df.empty else {},
+            _label_counts(val_df["y"].astype(int).to_numpy()) if not val_df.empty else {},
+            _label_counts(test_df["y"].astype(int).to_numpy()) if not test_df.empty else {},
+        )
         if train_df.empty or val_df.empty or test_df.empty:
             raise RuntimeError("insufficient split size for train/val/test")
 
@@ -270,6 +302,9 @@ def run_train_once(db: Database) -> TrainResult:
         y_val = val_df["y"].astype(int).to_numpy()
         x_test = test_df[feature_names]
         y_test = test_df["y"].astype(int).to_numpy()
+        _require_binary_labels("train split", y_train)
+        _require_binary_labels("val split", y_val)
+        _require_binary_labels("test split", y_test)
 
         estimator = _build_base_estimator()
         class_counts = np.bincount(y_train, minlength=2)
@@ -350,6 +385,20 @@ def run_train_once(db: Database) -> TrainResult:
             last_train_sample_count=int(len(df)),
             last_train_positive_ratio=float(df["y"].mean()),
         )
+
+        if promoted and settings.revalidate_on_promotion:
+            from .worker import ValidationWorker
+
+            try:
+                revalidated = ValidationWorker(db).revalidate_recent_candidates()
+                LOG.info(
+                    "promotion revalidation complete run_id=%s version=%s processed=%s",
+                    run_id,
+                    model_version,
+                    revalidated,
+                )
+            except Exception:
+                LOG.exception("promotion revalidation failed run_id=%s version=%s", run_id, model_version)
 
         return TrainResult(
             run_id=run_id,

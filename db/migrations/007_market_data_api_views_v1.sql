@@ -1,6 +1,7 @@
 CREATE SCHEMA IF NOT EXISTS market_data_api;
 
-CREATE OR REPLACE VIEW market_data_api.v_candles_1m_v1 AS
+DROP VIEW IF EXISTS market_data_api.v_candles_1m_v1;
+CREATE VIEW market_data_api.v_candles_1m_v1 AS
 SELECT
     exchange,
     symbol,
@@ -18,7 +19,8 @@ SELECT
     updated_at
 FROM market_data.candles_1m;
 
-CREATE OR REPLACE VIEW market_data_api.v_indicator_values_v1 AS
+DROP VIEW IF EXISTS market_data_api.v_indicator_values_v1;
+CREATE VIEW market_data_api.v_indicator_values_v1 AS
 SELECT
     exchange,
     symbol,
@@ -31,7 +33,8 @@ SELECT
     updated_at
 FROM market_data.indicator_values;
 
-CREATE OR REPLACE VIEW market_data_api.v_signal_events_v1 AS
+DROP VIEW IF EXISTS market_data_api.v_signal_events_v1;
+CREATE VIEW market_data_api.v_signal_events_v1 AS
 SELECT
     id,
     exchange,
@@ -49,7 +52,8 @@ SELECT
     payload
 FROM market_data.signal_events;
 
-CREATE OR REPLACE VIEW market_data_api.v_signal_rule_configs_v1 AS
+DROP VIEW IF EXISTS market_data_api.v_signal_rule_configs_v1;
+CREATE VIEW market_data_api.v_signal_rule_configs_v1 AS
 SELECT
     rule_key,
     enabled,
@@ -61,7 +65,8 @@ SELECT
     updated_at
 FROM market_data.signal_rule_configs;
 
-CREATE OR REPLACE VIEW market_data_api.v_signal_ml_validation_v1 AS
+DROP VIEW IF EXISTS market_data_api.v_signal_ml_validation_v1;
+CREATE VIEW market_data_api.v_signal_ml_validation_v1 AS
 SELECT
     id,
     event_id,
@@ -89,7 +94,8 @@ SELECT
     updated_at
 FROM market_data.signal_ml_validation;
 
-CREATE OR REPLACE VIEW market_data_api.v_signal_ml_validation_latest_v1 AS
+DROP VIEW IF EXISTS market_data_api.v_signal_ml_validation_latest_v1;
+CREATE VIEW market_data_api.v_signal_ml_validation_latest_v1 AS
 SELECT DISTINCT ON (event_id)
     id,
     event_id,
@@ -116,9 +122,14 @@ SELECT DISTINCT ON (event_id)
     created_at,
     updated_at
 FROM market_data.signal_ml_validation
-ORDER BY event_id, validated_at DESC, id DESC;
+ORDER BY
+    event_id,
+    validated_at DESC,
+    CASE WHEN model_version IN ('', 'unavailable') THEN 1 ELSE 0 END,
+    id DESC;
 
-CREATE OR REPLACE VIEW market_data_api.v_signal_ml_training_runs_v1 AS
+DROP VIEW IF EXISTS market_data_api.v_signal_ml_training_runs_v1;
+CREATE VIEW market_data_api.v_signal_ml_training_runs_v1 AS
 SELECT
     id,
     model_name,
@@ -141,7 +152,8 @@ SELECT
     feature_importance
 FROM market_data.signal_ml_training_runs;
 
-CREATE OR REPLACE VIEW market_data_api.v_signal_ml_runtime_state_v1 AS
+DROP VIEW IF EXISTS market_data_api.v_signal_ml_runtime_state_v1;
+CREATE VIEW market_data_api.v_signal_ml_runtime_state_v1 AS
 SELECT
     id,
     champion_version,
@@ -152,7 +164,8 @@ SELECT
     updated_at
 FROM market_data.signal_ml_runtime_state;
 
-CREATE OR REPLACE VIEW market_data_api.v_signal_ml_drift_checks_v1 AS
+DROP VIEW IF EXISTS market_data_api.v_signal_ml_drift_checks_v1;
+CREATE VIEW market_data_api.v_signal_ml_drift_checks_v1 AS
 SELECT
     id,
     model_name,

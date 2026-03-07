@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .config import settings
-from .db import Database
+from .db import Database, interval_duration
 from .features import build_feature_map
 from .labeling import rsi_revert_label, triple_barrier_label
 
@@ -160,7 +160,7 @@ def build_sample_for_event(
 
 def build_training_dataset_with_stats(db: Database) -> tuple[list[SampleRow], DatasetBuildStats]:
     now = datetime.now(tz=timezone.utc)
-    end_ts = now - timedelta(hours=settings.horizon_bars)
+    end_ts = now - interval_duration(settings.interval, settings.horizon_bars)
     start_ts = end_ts - timedelta(days=settings.lookback_days)
 
     events = db.fetch_rsi_events_for_training(
