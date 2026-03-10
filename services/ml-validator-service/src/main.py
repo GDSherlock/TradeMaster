@@ -58,9 +58,9 @@ def run_train_loop() -> None:
         )
 
         if should_run:
+            last_run_day = day_key
             try:
                 result = run_train_once(db)
-                last_run_day = day_key
                 LOG.info(
                     "ml train done run_id=%s version=%s promoted=%s threshold=%.4f",
                     result.run_id,
@@ -100,9 +100,9 @@ def run_recalibration_loop() -> None:
         )
 
         if should_run:
+            last_run_week = week_key
             try:
                 result = run_recalibration_once(db)
-                last_run_week = week_key
                 LOG.info(
                     "ml recalibration done id=%s promoted=%s old=%.4f new=%.4f",
                     result.recalibration_id,

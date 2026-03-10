@@ -62,10 +62,11 @@ scan_pattern() {
 
   local matches
   matches="$(
-    rg -n --no-heading -S --hidden "$pattern" "$ROOT" \
+    rg -n --no-heading -S --hidden -uu "$pattern" "$ROOT" \
       --glob '!**/.git/**' \
       --glob '!**/.venv/**' \
       --glob '!**/.venv-security/**' \
+      --glob '!**/.next/**' \
       --glob '!**/logs/**' \
       --glob '!**/run/**' \
       --glob '!**/data/**' \
@@ -89,7 +90,8 @@ scan_pattern() {
 scan_auth_enabled_false() {
   local matches
   matches="$(
-    rg -n --no-heading -S --hidden '^\s*AUTH_ENABLED\s*=\s*false\s*$' "$ROOT/config" \
+    # Inspect ignored local env files as well, otherwise config/.env is silently skipped.
+    rg -n --no-heading -S --hidden -uu '^\s*AUTH_ENABLED\s*=\s*false\s*$' "$ROOT/config" \
       --glob '!**/.venv/**' \
       2>/dev/null || true
   )"
@@ -117,7 +119,7 @@ scan_auth_enabled_false() {
 scan_default_token() {
   local matches
   matches="$(
-    rg -n --no-heading -S --hidden '^\s*API_TOKEN\s*=\s*dev-token\s*$' "$ROOT/config" \
+    rg -n --no-heading -S --hidden -uu '^\s*API_TOKEN\s*=\s*dev-token\s*$' "$ROOT/config" \
       --glob '!**/.venv/**' \
       2>/dev/null || true
   )"

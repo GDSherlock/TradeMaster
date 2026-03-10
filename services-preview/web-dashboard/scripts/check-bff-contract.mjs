@@ -20,6 +20,9 @@ function isType(value, type) {
   if (type === "boolean") {
     return typeof value === "boolean";
   }
+  if (type === "object") {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
   if (type === "any") {
     return true;
   }
@@ -68,6 +71,10 @@ function run() {
     {
       file: path.join(CONTRACT_DIR, "snapshots/chat-success.json"),
       schemaKey: "chat_success_v1",
+    },
+    {
+      file: path.join(CONTRACT_DIR, "snapshots/chat-success-v2.json"),
+      schemaKey: "chat_success_v2",
     },
     {
       file: path.join(CONTRACT_DIR, "snapshots/error-rate-limited.json"),

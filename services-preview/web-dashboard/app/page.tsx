@@ -10,6 +10,7 @@ import { SignalPanel } from "@/components/dashboard-v2/SignalPanel";
 import { formatClock } from "@/components/dashboard-v2/common/format";
 import {
   createSignalSocket,
+  detectChatLanguage,
   type FetchMeta,
   fetchApiHealth,
   fetchIndicatorRows,
@@ -25,13 +26,14 @@ import {
   fetchSignalsLatest,
   fetchTopMovers,
   fetchTrendHistory,
+  localizeChatFallbackText,
   resolveRuntimeEndpoints,
   sendChatMessage
 } from "@/lib/live-data";
 import type {
   ChatContextState,
   ChatMessage,
-  ChatStrategyCard,
+  ChatResponseMode,
   CooldownItem,
   DashboardFetchState,
   IndicatorRow,
@@ -113,54 +115,6 @@ function mergeSignalEvents(current: SignalEvent[], incoming: SignalEvent[]): Sig
     .slice(0, SIGNAL_WINDOW_SIZE);
 }
 
-function parseStrategyCard(text: string): ChatStrategyCard | undefined {
-  const lines = text
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const sections: ChatStrategyCard = {
-    summary: "",
-    evidence: "",
-    risk: "",
-    nextActions: ""
-  };
-
-  let cursor: keyof ChatStrategyCard | null = null;
-
-  for (const line of lines) {
-    const normalized = line.replace(/^[-*]\s*/, "");
-
-    if (normalized.startsWith("结论") || normalized.toLowerCase().startsWith("summary")) {
-      cursor = "summary";
-      sections.summary = normalized.replace(/^(结论|summary)[:：]?\s*/i, "");
-      continue;
-    }
-    if (normalized.startsWith("依据") || normalized.toLowerCase().startsWith("evidence")) {
-      cursor = "evidence";
-      sections.evidence = normalized.replace(/^(依据|evidence)[:：]?\s*/i, "");
-      continue;
-    }
-    if (normalized.startsWith("风险") || normalized.toLowerCase().startsWith("risk")) {
-      cursor = "risk";
-      sections.risk = normalized.replace(/^(风险|risk)[:：]?\s*/i, "");
-      continue;
-    }
-    if (normalized.startsWith("下一步") || normalized.toLowerCase().startsWith("next")) {
-      cursor = "nextActions";
-      sections.nextActions = normalized.replace(/^(下一步|next actions?|next)[:：]?\s*/i, "");
-      continue;
-    }
-
-    if (cursor) {
-      sections[cursor] = sections[cursor] ? `${sections[cursor]} ${normalized}` : normalized;
-    }
-  }
-
-  const filled = Object.values(sections).filter((item) => item.trim().length > 0).length;
-  return filled >= 2 ? sections : undefined;
-}
-
 function buildMarketPulse(
   momentum: MomentumSnapshot | null,
   signalEvents: SignalEvent[],
@@ -230,7 +184,7 @@ export default function DashboardV2Page() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Connected. Ask for signal conflicts, risk scenarios, or next monitoring conditions.",
+      content: "已连接。直接问我方向、关键位和失效条件就行。",
       timeLabel: nowLabel()
     }
   ]);
@@ -1064,7 +1018,7 @@ export default function DashboardV2Page() {
   }, []);
 
   const handleSendChat = useCallback(
-    async (text: string) => {
+    async (text: string, mode: ChatResponseMode) => {
       const userMessage: ChatMessage = {
         id: `user-${Date.now()}`,
         role: "user",
@@ -1082,14 +1036,16 @@ export default function DashboardV2Page() {
           symbol: chatContext.symbol,
           interval: chatContext.interval,
           activeRule: chatContext.activeRule,
-          mlDecision: chatContext.mlDecision
+          mlDecision: chatContext.mlDecision,
+          requestedMode: mode
         });
 
         const assistantMessage: ChatMessage = {
           id: `assistant-${Date.now()}`,
           role: "assistant",
           content: reply.text,
-          strategy: parseStrategyCard(reply.text),
+          renderPayload: reply.renderPayload,
+          degradedReason: reply.degradedReason,
           timeLabel: nowLabel()
         };
 
@@ -1100,10 +1056,12 @@ export default function DashboardV2Page() {
           setChatMessages((current) => [...current, assistantMessage]);
         }
       } catch {
+        const replyLanguage = detectChatLanguage(text);
         const assistantMessage: ChatMessage = {
           id: `assistant-${Date.now()}`,
           role: "assistant",
-          content: "Chat service is temporarily unavailable. Please retry in a moment.",
+          content: localizeChatFallbackText(replyLanguage, "service_unavailable"),
+          degradedReason: "service_unavailable",
           timeLabel: nowLabel()
         };
         if (!unmountedRef.current) {

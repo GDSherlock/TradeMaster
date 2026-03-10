@@ -1,4 +1,6 @@
 import type {
+  ChatRenderPayload,
+  ChatResponseMode,
   CooldownItem,
   IndicatorRow,
   MlCandidateRow,
@@ -37,6 +39,8 @@ type FetchPayload<T> = {
 };
 
 type FetchMetaListener = (meta: FetchMeta) => void;
+const CJK_RE = /[\u4e00-\u9fff]/;
+const LATIN_RE = /[A-Za-z]/;
 
 const VALID_ML_STATUS: Set<MlValidationStatus> = new Set(["pending", "passed", "review", "rejected", "unavailable"]);
 
@@ -70,6 +74,44 @@ function parseRetryAfterMs(value: string | null): number | null {
     return null;
   }
   return Math.max(0, dateTs - Date.now());
+}
+
+export function detectChatLanguage(message: string, requested?: "en" | "zh"): "en" | "zh" {
+  if (requested === "en" || requested === "zh") {
+    return requested;
+  }
+  if (CJK_RE.test(message)) {
+    return "zh";
+  }
+  if (LATIN_RE.test(message)) {
+    return "en";
+  }
+  return "zh";
+}
+
+export function localizeChatFallbackText(
+  language: "en" | "zh",
+  reason: "rate_limited" | "service_unavailable" | "empty_response"
+): string {
+  if (language === "zh") {
+    switch (reason) {
+      case "rate_limited":
+        return "聊天请求过于频繁，请稍后再试。";
+      case "empty_response":
+        return "暂时没有可用回复，请稍后再试。";
+      default:
+        return "聊天服务暂时不可用，请稍后再试。";
+    }
+  }
+
+  switch (reason) {
+    case "rate_limited":
+      return "Chat is rate limited now. Please retry shortly.";
+    case "empty_response":
+      return "No response content right now. Please retry in a moment.";
+    default:
+      return "Chat service is temporarily unavailable. Please retry in a moment.";
+  }
 }
 
 function toNumber(value: unknown, fallback = 0): number {
@@ -566,6 +608,8 @@ export type ChatSendOptions = {
   interval?: string;
   activeRule?: string | null;
   mlDecision?: string | null;
+  requestedMode?: ChatResponseMode;
+  language?: "en" | "zh";
 };
 
 export type ChatReply = {
@@ -577,26 +621,127 @@ export type ChatReply = {
   rateLimited: boolean;
   retryAfterMs: number | null;
   httpStatus: number | null;
+  renderPayload?: ChatRenderPayload;
+  schemaVersion?: string | null;
+  mode?: ChatResponseMode | null;
+  degradedReason?: string | null;
 };
 
-function buildChatPrompt(message: string, options: ChatSendOptions): string {
-  const contextRows = [
-    options.symbol ? `symbol=${options.symbol}` : null,
-    options.interval ? `interval=${options.interval}` : null,
-    options.activeRule ? `active_rule=${options.activeRule}` : null,
-    options.mlDecision ? `ml_decision=${options.mlDecision}` : null
-  ].filter(Boolean);
+function toChatMode(value: unknown): ChatResponseMode {
+  return value === "compact" || value === "deep" ? value : "standard";
+}
 
-  const contextBlock = contextRows.length > 0 ? `Context: ${contextRows.join("; ")}\n` : "";
-  const strategyFormat =
-    "Please answer in four sections with Chinese headings: 结论, 依据, 风险, 下一步. Keep each section concise and actionable.";
+function toStringList(value: unknown, maxItems: number): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const rows = value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean)
+    .slice(0, maxItems);
+  return rows.length > 0 ? rows : undefined;
+}
 
-  return `${contextBlock}${message}\n\n${strategyFormat}`;
+function normalizeChatRenderPayload(value: unknown): ChatRenderPayload | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const row = value as Record<string, unknown>;
+  const title = typeof row.title === "string" ? row.title.trim() : "";
+  const summary = typeof row.summary === "string" ? row.summary.trim() : "";
+  const stance = typeof row.stance === "string" ? row.stance : "";
+  const confidenceRow = row.confidence;
+  if (!title || !summary || !confidenceRow || typeof confidenceRow !== "object" || Array.isArray(confidenceRow)) {
+    return undefined;
+  }
+
+  const confidence = confidenceRow as Record<string, unknown>;
+  const band = typeof confidence.band === "string" ? confidence.band : "";
+  const reason = typeof confidence.reason === "string" ? confidence.reason.trim() : "";
+  if (!reason || !["high", "medium", "low"].includes(band)) {
+    return undefined;
+  }
+
+  const rawLevels = Array.isArray(row.key_levels) ? row.key_levels : [];
+  const keyLevels = rawLevels
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return null;
+      }
+      const level = item as Record<string, unknown>;
+      const kind = typeof level.kind === "string" ? level.kind : "";
+      const label = typeof level.label === "string" ? level.label.trim() : "";
+      const rawValue = typeof level.value === "string" ? level.value.trim() : "";
+      if (!label || !rawValue || !["trigger", "support", "resistance", "invalidation"].includes(kind)) {
+        return null;
+      }
+      return {
+        kind: kind as "trigger" | "support" | "resistance" | "invalidation",
+        label,
+        value: rawValue
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  const dataQuality =
+    row.data_quality && typeof row.data_quality === "object" && !Array.isArray(row.data_quality)
+      ? {
+          status: String((row.data_quality as Record<string, unknown>).status || "partial") as "full" | "partial" | "thin",
+          note:
+            typeof (row.data_quality as Record<string, unknown>).note === "string"
+              ? String((row.data_quality as Record<string, unknown>).note)
+              : undefined
+        }
+      : undefined;
+
+  const detail =
+    row.expandable_detail && typeof row.expandable_detail === "object" && !Array.isArray(row.expandable_detail)
+      ? {
+          thesis:
+            typeof (row.expandable_detail as Record<string, unknown>).thesis === "string"
+              ? String((row.expandable_detail as Record<string, unknown>).thesis)
+              : undefined,
+          evidence: toStringList((row.expandable_detail as Record<string, unknown>).evidence, 3),
+          scenarioMap: toStringList((row.expandable_detail as Record<string, unknown>).scenario_map, 3),
+          mlContext:
+            typeof (row.expandable_detail as Record<string, unknown>).ml_context === "string"
+              ? String((row.expandable_detail as Record<string, unknown>).ml_context)
+              : undefined
+        }
+      : undefined;
+
+  if (!["bullish", "bearish", "neutral", "conflicted", "no_trade"].includes(stance)) {
+    return undefined;
+  }
+
+  return {
+    version: "chat_v2",
+    language: row.language === "zh" ? "zh" : "en",
+    mode: toChatMode(row.mode),
+    title,
+    stance: stance as ChatRenderPayload["stance"],
+    confidence: {
+      band: band as ChatRenderPayload["confidence"]["band"],
+      reason,
+      score: typeof confidence.score === "number" ? confidence.score : undefined
+    },
+    summary,
+    marketContext: typeof row.market_context === "string" ? row.market_context : undefined,
+    actionPosture: typeof row.action_posture === "string" ? row.action_posture : undefined,
+    keyLevels: keyLevels.length > 0 ? keyLevels : undefined,
+    riskFlags: toStringList(row.risk_flags, 3),
+    watchpoints: toStringList(row.watchpoints, 3),
+    dataQuality,
+    expandableDetail: detail,
+    complianceNote: typeof row.compliance_note === "string" ? row.compliance_note : undefined
+  };
 }
 
 export async function sendChatMessage(chatBase: string, message: string, options: ChatSendOptions = {}): Promise<ChatReply> {
+  const replyLanguage = detectChatLanguage(message, options.language);
   const payload: Record<string, unknown> = {
-    message: buildChatPrompt(message, options)
+    message
   };
 
   if (options.sessionId) {
@@ -605,6 +750,14 @@ export async function sendChatMessage(chatBase: string, message: string, options
   if (options.history && options.history.length > 0) {
     payload.history = options.history.map((item) => ({ role: item.role, content: item.content }));
   }
+  payload.ui_context = {
+    symbol: options.symbol,
+    interval: options.interval,
+    active_rule: options.activeRule,
+    ml_decision: options.mlDecision,
+    requested_mode: options.requestedMode ?? "standard",
+    language: options.language
+  };
 
   try {
     const response = await fetch(`${chatBase}/chat`, {
@@ -619,9 +772,7 @@ export async function sendChatMessage(chatBase: string, message: string, options
     const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
     if (!response.ok) {
       const rateLimited = response.status === 429;
-      const text = rateLimited
-        ? "Chat is rate limited now. Please retry shortly."
-        : "Chat service is temporarily unavailable. Please retry in a moment.";
+      const text = localizeChatFallbackText(replyLanguage, rateLimited ? "rate_limited" : "service_unavailable");
       return {
         text,
         sessionId: null,
@@ -630,32 +781,43 @@ export async function sendChatMessage(chatBase: string, message: string, options
         degraded: true,
         rateLimited,
         retryAfterMs,
-        httpStatus: response.status
+        httpStatus: response.status,
+        degradedReason: rateLimited ? "rate_limited" : "service_unavailable"
       };
     }
 
     const result = (await response.json()) as Record<string, unknown>;
     const text = result.reply ?? result.answer ?? result.content;
+    const renderPayload = normalizeChatRenderPayload(result.render_payload);
+    const mode = result.mode == null ? null : toChatMode(result.mode);
     return {
-      text: typeof text === "string" && text.trim() ? text.trim() : "No response content.",
+      text:
+        typeof text === "string" && text.trim()
+          ? text.trim()
+          : localizeChatFallbackText(replyLanguage, "empty_response"),
       sessionId: result.session_id ? String(result.session_id) : null,
       model: result.model ? String(result.model) : null,
       timestampMs: result.timestamp_ms == null ? null : toNumber(result.timestamp_ms, 0),
-      degraded: false,
+      degraded: Boolean(result.degraded_reason),
       rateLimited: false,
       retryAfterMs,
-      httpStatus: response.status
+      httpStatus: response.status,
+      renderPayload,
+      schemaVersion: result.schema_version ? String(result.schema_version) : null,
+      mode,
+      degradedReason: result.degraded_reason ? String(result.degraded_reason) : null
     };
   } catch {
     return {
-      text: "Chat service is temporarily unavailable. Please retry in a moment.",
+      text: localizeChatFallbackText(replyLanguage, "service_unavailable"),
       sessionId: null,
       model: null,
       timestampMs: null,
       degraded: true,
       rateLimited: false,
       retryAfterMs: null,
-      httpStatus: null
+      httpStatus: null,
+      degradedReason: "service_unavailable"
     };
   }
 }

@@ -14,7 +14,9 @@ if str(SERVICE_ROOT) not in sys.path:
 os.environ.setdefault("AUTH_ENABLED", "false")
 os.environ.setdefault("API_TOKEN", "dev-token")
 
+from src.auth import PUBLIC_PATHS  # noqa: E402
 from src.response import api_response  # noqa: E402
+from src.routers.health import health_payload  # noqa: E402
 from src.routers.ml import _format_runtime_state, _format_training_run  # noqa: E402
 from src.routers.signal import _event_to_api_item  # noqa: E402
 
@@ -25,6 +27,13 @@ class ApiContractShapeTests(unittest.TestCase):
         self.assertSetEqual(set(payload.keys()), {"code", "msg", "success", "data"})
         self.assertEqual(payload["code"], "0")
         self.assertTrue(payload["success"])
+
+    def test_health_payload_is_reusable_for_root_alias(self) -> None:
+        payload = health_payload()
+        self.assertEqual(payload["data"]["service"], "api-service")
+        self.assertEqual(payload["data"]["status"], "healthy")
+        self.assertIn("/health", PUBLIC_PATHS)
+        self.assertIn("/api/health", PUBLIC_PATHS)
 
     def test_signal_event_shape(self) -> None:
         now = datetime.now(tz=timezone.utc)

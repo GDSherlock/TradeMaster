@@ -17,6 +17,7 @@ from src.config import settings
 from src.db import get_pool
 from src.response import ErrorCode, api_response, error_response
 from src.routers import futures_router, health_router, indicator_router, markets_router, ml_router, signal_router
+from src.routers.health import health_payload
 
 LOG = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ async def auth_and_limit_middleware(request: Request, call_next):
     except Exception:
         return JSONResponse(status_code=401, content=error_response(ErrorCode.UNAUTHORIZED, "unauthorized"))
 
-    if request.url.path not in {"/api/health", "/docs", "/openapi.json", "/redoc"}:
+    if request.url.path not in {"/health", "/api/health", "/docs", "/openapi.json", "/redoc"}:
         if not limiter.allow(client_ip):
             return JSONResponse(status_code=429, content=error_response(ErrorCode.RATE_LIMITED, "rate limited"))
 
@@ -89,6 +90,11 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError):
 async def unhandled_exception_handler(_: Request, exc: Exception):
     LOG.exception("unhandled api error")
     return JSONResponse(status_code=500, content=error_response(ErrorCode.INTERNAL_ERROR, "internal server error"))
+
+
+@app.get("/health", include_in_schema=False)
+def root_health() -> dict:
+    return health_payload()
 
 
 app.include_router(health_router, prefix="/api")

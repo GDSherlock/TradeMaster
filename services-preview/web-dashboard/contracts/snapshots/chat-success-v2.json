@@ -1,0 +1,39 @@
+{
+  "reply": "现在偏多，但前提是 68,400 上方别失守。\n\n重点看\n先看 68,400 能不能守住，再看 69,200 有没有继续突破。\n\n如果错了，会怎么错\n如果很快跌回 67,800 下方，这个判断就会明显变弱。\n\n补充\n更像确认后的顺势跟，不像提前抢跑。 量能和盘面联动还在配合。",
+  "session_id": "session-002",
+  "model": "gpt-5.2",
+  "timestamp_ms": 1772710000001,
+  "schema_version": "chat_v2",
+  "mode": "standard",
+  "render_payload": {
+    "version": "chat_v2",
+    "language": "zh",
+    "mode": "standard",
+    "title": "BTCUSDT 1h",
+    "stance": "bullish",
+    "confidence": {
+      "band": "high",
+      "reason": "ML 验证和实时信号方向一致。",
+      "score": 0.82
+    },
+    "summary": "现在偏多，但前提是 68,400 上方别失守。",
+    "market_context": "量能和盘面联动还在配合。",
+    "action_posture": "更像确认后的顺势跟，不像提前抢跑。",
+    "key_levels": [
+      { "kind": "trigger", "label": "Trigger", "value": "68,400.0" },
+      { "kind": "support", "label": "Support", "value": "67,800.0" },
+      { "kind": "resistance", "label": "Resistance", "value": "69,200.0" },
+      { "kind": "invalidation", "label": "Invalidation", "value": "67,800.0" }
+    ],
+    "risk_flags": [
+      "如果很快跌回 67,800 下方，这个判断就会明显变弱。"
+    ],
+    "watchpoints": [
+      "先看 68,400 能不能守住，再看 69,200 有没有继续突破。"
+    ],
+    "data_quality": {
+      "status": "full"
+    },
+    "compliance_note": "仅供市场观察。"
+  }
+}

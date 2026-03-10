@@ -2,17 +2,19 @@
 
 import { useMemo, useState } from "react";
 
-import type { ChatContextState, ChatMessage } from "@/types/legacy-dashboard";
+import { ChatResponseCard } from "@/components/dashboard-v2/ChatResponseCard";
+import type { ChatContextState, ChatMessage, ChatResponseMode } from "@/types/legacy-dashboard";
 
 type ChatPanelProps = {
   messages: ChatMessage[];
   pending: boolean;
   context: ChatContextState;
-  onSend: (text: string) => Promise<void>;
+  onSend: (text: string, mode: ChatResponseMode) => Promise<void>;
 };
 
 export function ChatPanel({ messages, pending, context, onSend }: ChatPanelProps) {
   const [value, setValue] = useState("");
+  const [mode, setMode] = useState<ChatResponseMode>("standard");
 
   const templates = useMemo(
     () => [
@@ -29,7 +31,7 @@ export function ChatPanel({ messages, pending, context, onSend }: ChatPanelProps
       return;
     }
     setValue("");
-    await onSend(cleaned);
+    await onSend(cleaned, mode);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -53,6 +55,18 @@ export function ChatPanel({ messages, pending, context, onSend }: ChatPanelProps
         <span className="v2-chip">ml: {context.mlDecision ?? "--"}</span>
       </div>
 
+      <div className="v2-switch v2-chat-mode-switch" role="tablist" aria-label="response mode">
+        <button type="button" className={mode === "compact" ? "active" : ""} onClick={() => setMode("compact")}>
+          Compact
+        </button>
+        <button type="button" className={mode === "standard" ? "active" : ""} onClick={() => setMode("standard")}>
+          Standard
+        </button>
+        <button type="button" className={mode === "deep" ? "active" : ""} onClick={() => setMode("deep")}>
+          Deep
+        </button>
+      </div>
+
       <div className="v2-template-row">
         {templates.map((item) => (
           <button key={item} type="button" onClick={() => void submit(item)} disabled={pending}>
@@ -64,31 +78,15 @@ export function ChatPanel({ messages, pending, context, onSend }: ChatPanelProps
       <div className="v2-chat-log">
         {messages.map((message) => (
           <article key={message.id} className={`v2-chat-bubble ${message.role}`}>
-            <p>{message.content}</p>
-            {message.strategy && (
-              <div className="v2-strategy-card">
-                <section>
-                  <h4>结论</h4>
-                  <p>{message.strategy.summary}</p>
-                </section>
-                <section>
-                  <h4>依据</h4>
-                  <p>{message.strategy.evidence}</p>
-                </section>
-                <section>
-                  <h4>风险</h4>
-                  <p>{message.strategy.risk}</p>
-                </section>
-                <section>
-                  <h4>下一步</h4>
-                  <p>{message.strategy.nextActions}</p>
-                </section>
-              </div>
+            {message.role === "assistant" && message.renderPayload ? (
+              <ChatResponseCard payload={message.renderPayload} degradedReason={message.degradedReason} />
+            ) : (
+              <p>{message.content}</p>
             )}
             <span>{message.timeLabel}</span>
           </article>
         ))}
-        {pending && <p className="v2-chat-pending">Assistant is preparing strategy cards...</p>}
+        {pending && <p className="v2-chat-pending">TradeMaster is building the market view...</p>}
       </div>
 
       <form className="v2-chat-input" onSubmit={handleSubmit}>
@@ -107,7 +105,7 @@ export function ChatPanel({ messages, pending, context, onSend }: ChatPanelProps
         </button>
       </form>
 
-      <p className="v2-footnote">Chat is proxied to backend only. No API token is exposed in browser.</p>
+      <p className="v2-footnote">Chat stays on the backend path only. No API token is exposed in the browser.</p>
     </section>
   );
 }

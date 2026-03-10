@@ -43,9 +43,10 @@ class MonitorScheduler:
         if not should_run:
             return
 
+        # Automated schedules should attempt once per day; operators can rerun manually if needed.
+        self._last_train_day = day_key
         try:
             result = run_train_once(self.db)
-            self._last_train_day = day_key
             LOG.info(
                 "daily train done run_id=%s version=%s promoted=%s threshold=%.4f",
                 result.run_id,
@@ -74,9 +75,10 @@ class MonitorScheduler:
         if not should_run:
             return
 
+        # Weekly recalibration also runs at most once per scheduled window.
+        self._last_recal_week = year_week
         try:
             result = run_recalibration_once(self.db)
-            self._last_recal_week = year_week
             LOG.info(
                 "weekly recalibration done id=%s version=%s promoted=%s old=%.4f new=%.4f",
                 result.recalibration_id,

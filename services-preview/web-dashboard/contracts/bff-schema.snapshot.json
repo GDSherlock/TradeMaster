@@ -5,6 +5,26 @@
       "session_id": "string|null",
       "model": "string|null",
       "timestamp_ms": "number|null"
+    },
+    "optional": {
+      "render_payload": "object|null",
+      "schema_version": "string|null",
+      "mode": "string|null",
+      "degraded_reason": "string|null"
+    }
+  },
+  "chat_success_v2": {
+    "required": {
+      "reply": "string",
+      "session_id": "string|null",
+      "model": "string|null",
+      "timestamp_ms": "number|null",
+      "render_payload": "object",
+      "schema_version": "string",
+      "mode": "string|null"
+    },
+    "optional": {
+      "degraded_reason": "string|null"
     }
   },
   "error_envelope_v1": {

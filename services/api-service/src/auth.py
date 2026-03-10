@@ -6,6 +6,7 @@ from .config import settings
 from .response import ErrorCode
 
 PUBLIC_PATHS = {
+    "/health",
     "/api/health",
     "/docs",
     "/openapi.json",

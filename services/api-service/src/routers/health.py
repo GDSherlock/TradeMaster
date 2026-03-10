@@ -9,8 +9,7 @@ from src.response import api_response
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health")
-def health() -> dict:
+def health_payload() -> dict:
     return api_response(
         {
             "status": "healthy",
@@ -18,3 +17,8 @@ def health() -> dict:
             "timestamp": int(datetime.now(tz=timezone.utc).timestamp() * 1000),
         }
     )
+
+
+@router.get("/health")
+def health() -> dict:
+    return health_payload()

@@ -4,6 +4,12 @@ export type SignalBoardMode = "events" | "bySymbol" | "byRule";
 
 export type MlValidationStatus = "pending" | "passed" | "review" | "rejected" | "unavailable";
 
+export type ChatResponseMode = "compact" | "standard" | "deep";
+
+export type ChatStance = "bullish" | "bearish" | "neutral" | "conflicted" | "no_trade";
+
+export type ChatConfidenceBand = "high" | "medium" | "low";
+
 export type MlCandidateFilterStatus = "all" | MlValidationStatus;
 
 export type MlValidationBadge = {
@@ -105,11 +111,42 @@ export type DashboardFetchState = {
   lastStatusCode: number | null;
 };
 
-export type ChatStrategyCard = {
+export type ChatRenderKeyLevel = {
+  kind: "trigger" | "support" | "resistance" | "invalidation";
+  label: string;
+  value: string;
+};
+
+export type ChatRenderDetail = {
+  thesis?: string;
+  evidence?: string[];
+  scenarioMap?: string[];
+  mlContext?: string;
+};
+
+export type ChatRenderPayload = {
+  version: "chat_v2";
+  language: "en" | "zh";
+  mode: ChatResponseMode;
+  title: string;
+  stance: ChatStance;
+  confidence: {
+    band: ChatConfidenceBand;
+    reason: string;
+    score?: number;
+  };
   summary: string;
-  evidence: string;
-  risk: string;
-  nextActions: string;
+  marketContext?: string;
+  actionPosture?: string;
+  keyLevels?: ChatRenderKeyLevel[];
+  riskFlags?: string[];
+  watchpoints?: string[];
+  dataQuality?: {
+    status: "full" | "partial" | "thin";
+    note?: string;
+  };
+  expandableDetail?: ChatRenderDetail;
+  complianceNote?: string;
 };
 
 export type ChatMessage = {
@@ -117,7 +154,8 @@ export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   timeLabel: string;
-  strategy?: ChatStrategyCard;
+  renderPayload?: ChatRenderPayload;
+  degradedReason?: string | null;
 };
 
 export type ChatContextState = {
