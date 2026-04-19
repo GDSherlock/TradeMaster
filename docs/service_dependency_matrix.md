@@ -6,6 +6,7 @@
 | `pipeline-service` | `market_data.candles_1m`, `market_data.indicator_values`, `market_data.backfill_state`, `market_data.indicator_state`, `market_data.ingest_heartbeat` | `market_data.candles_1m`, `market_data.backfill_state`, `market_data.indicator_state` | Binance WS, Binance REST, HuggingFace dataset |
 | `signal-service` | `market_data.signal_events`, `market_data.signal_state`, `market_data.ingest_heartbeat` | `market_data.indicator_values`, `market_data.candles_1m`, `market_data.signal_rule_configs`, `market_data.signal_state`, `market_data.signal_events` | None |
 | `ml-validator-service` | `market_data.signal_ml_validation`, `market_data.signal_ml_training_runs`, `market_data.signal_ml_runtime_state`, `market_data.signal_ml_drift_checks`, `market_data.signal_ml_recalibration_runs` | `market_data.signal_events`, `market_data.indicator_values`, `market_data.candles_1m`, `market_data.signal_ml_*` | None |
+| `backtest-service` | `market_data.backtest_strategies`, `market_data.backtest_strategy_versions`, `market_data.backtest_runs`, `market_data.backtest_run_trades`, `market_data.backtest_run_equity_points`, `market_data.backtest_run_events` | `market_data.candles_1m`, `market_data.indicator_values`, `market_data.signal_rule_configs`, `market_data_api.v_backtest_*_v1` | None |
 | `api-service` | None | `market_data_api.v_*_v1` views only | None |
 | `chat-service` | `audit.chat_requests` (optional DB audit), local audit file | via `api-service` REST only | `api-service`, LLM provider |
 | `web-dashboard` | None | via same-origin BFF only (`/api/trademaster/*`) | `api-service` and `chat-service` only through Next.js BFF |
@@ -14,6 +15,7 @@
 | Purpose | Entry | Upstream |
 | --- | --- | --- |
 | Market/indicator/signal/ml GET | `/api/trademaster/[...path]` | `api-service` (`/api/*`) |
+| Backtest GET/POST | `/api/trademaster/backtest/*` | `backtest-service` (`/backtest/*`) |
 | Chat POST | `/api/trademaster/chat` | `chat-service` (`/chat`) |
 | Signal WS | `NEXT_PUBLIC_SIGNAL_WS_URL` (default `ws://<host>:8000/ws/signal`) | `api-service` WS |
 

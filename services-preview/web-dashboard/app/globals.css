@@ -1248,14 +1248,408 @@ body {
   }
 }
 
+.bt-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(255, 176, 32, 0.08), transparent 28%),
+    radial-gradient(circle at 90% 0%, rgba(57, 80, 111, 0.16), transparent 34%),
+    linear-gradient(180deg, #07101b 0%, #0a1522 48%, #06101a 100%);
+}
+
+.bt-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.bt-grid {
+  padding: 16px 4vw 36px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr) minmax(0, 1.15fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.bt-panel {
+  min-height: 840px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bt-panel-head,
+.bt-clause-head,
+.bt-chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bt-panel-head h2,
+.bt-clause-head h3,
+.bt-chart-head strong {
+  margin: 0;
+}
+
+.bt-actions,
+.bt-inline-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bt-primary-btn,
+.bt-secondary-btn,
+.bt-ghost-btn,
+.bt-inline-btn {
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1px solid var(--v2-line);
+  background: #102036;
+  color: var(--v2-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.bt-primary-btn {
+  border-color: rgba(255, 191, 71, 0.62);
+  background: rgba(255, 176, 32, 0.16);
+  color: var(--v2-accent-2);
+}
+
+.bt-secondary-btn {
+  border-color: rgba(41, 214, 125, 0.36);
+  background: rgba(41, 214, 125, 0.12);
+  color: #d8ffea;
+}
+
+.bt-inline-btn.danger {
+  border-color: rgba(255, 107, 107, 0.34);
+  background: rgba(255, 107, 107, 0.12);
+  color: #ffd0d0;
+}
+
+.bt-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bt-metrics-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.bt-description-field {
+  grid-column: 1 / -1;
+}
+
+.bt-description-field textarea,
+.bt-panel textarea {
+  border: 1px solid var(--v2-line);
+  border-radius: 10px;
+  background: #0f1a2a;
+  color: var(--v2-text);
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  min-height: 88px;
+  resize: vertical;
+}
+
+.bt-builder-sections {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.bt-clause-panel,
+.bt-chart-card,
+.bt-run-summary {
+  border: 1px solid var(--v2-line-soft);
+  background: rgba(7, 16, 27, 0.44);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.bt-clause-list,
+.bt-run-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bt-clause-card {
+  border: 1px solid rgba(57, 80, 111, 0.66);
+  background: rgba(16, 32, 54, 0.65);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bt-clause-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bt-clause-wide {
+  grid-column: span 2;
+}
+
+.bt-strategy-list {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bt-strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bt-strategy-card,
+.bt-version-pill,
+.bt-run-main {
+  width: 100%;
+  border: 1px solid rgba(57, 80, 111, 0.66);
+  background: rgba(16, 32, 54, 0.58);
+  border-radius: 12px;
+  padding: 12px;
+  color: var(--v2-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.bt-strategy-card strong,
+.bt-run-main strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.bt-strategy-card span,
+.bt-run-main p,
+.bt-chart-head span,
+.bt-run-foot span {
+  color: var(--v2-muted);
+  font-size: 0.78rem;
+}
+
+.bt-strategy-card p {
+  margin: 8px 0 0;
+  color: var(--v2-muted);
+  font-size: 0.8rem;
+}
+
+.bt-strategy-card.active,
+.bt-version-pill.active,
+.bt-run-card.active {
+  border-color: rgba(255, 191, 71, 0.64);
+  box-shadow: 0 0 0 1px rgba(255, 191, 71, 0.18) inset;
+}
+
+.bt-version-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bt-version-pill {
+  width: auto;
+  padding: 8px 10px;
+}
+
+.bt-run-card {
+  border: 1px solid rgba(57, 80, 111, 0.66);
+  border-radius: 12px;
+  background: rgba(16, 32, 54, 0.58);
+  overflow: hidden;
+}
+
+.bt-run-main {
+  border: none;
+  border-radius: 0;
+  padding: 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bt-run-main p {
+  margin: 2px 0;
+}
+
+.bt-run-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  font-size: 0.78rem;
+}
+
+.bt-run-foot {
+  border-top: 1px solid rgba(57, 80, 111, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+}
+
+.bt-status {
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 0.75rem;
+  text-transform: capitalize;
+  border: 1px solid var(--v2-line);
+}
+
+.bt-status.completed {
+  color: #d8ffea;
+  background: rgba(41, 214, 125, 0.15);
+  border-color: rgba(41, 214, 125, 0.35);
+}
+
+.bt-status.running,
+.bt-status.queued {
+  color: #fff2d0;
+  background: rgba(244, 194, 71, 0.15);
+  border-color: rgba(244, 194, 71, 0.35);
+}
+
+.bt-status.failed,
+.bt-status.canceled {
+  color: #ffd0d0;
+  background: rgba(255, 107, 107, 0.15);
+  border-color: rgba(255, 107, 107, 0.35);
+}
+
+.bt-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bt-stat-card {
+  border: 1px solid rgba(57, 80, 111, 0.66);
+  background: rgba(16, 32, 54, 0.58);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.bt-stat-card span {
+  display: block;
+  color: var(--v2-muted);
+  font-size: 0.78rem;
+  margin-bottom: 6px;
+}
+
+.bt-stat-card strong {
+  font-size: 1rem;
+}
+
+.bt-stat-card.positive strong {
+  color: var(--v2-green);
+}
+
+.bt-stat-card.negative strong {
+  color: var(--v2-red);
+}
+
+.bt-chart-stack {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.bt-chart {
+  width: 100%;
+  height: 230px;
+}
+
+.bt-result-footer {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.bt-run-summary p {
+  margin: 0 0 10px;
+  font-size: 0.84rem;
+}
+
+.bt-error-inline,
+.bt-error {
+  color: #ffd0d0;
+}
+
+.bt-trade-table-wrap {
+  overflow: auto;
+  border: 1px solid rgba(57, 80, 111, 0.66);
+  border-radius: 12px;
+}
+
+.bt-trade-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.bt-trade-table th,
+.bt-trade-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(57, 80, 111, 0.34);
+  text-align: left;
+  font-size: 0.8rem;
+}
+
+.bt-trade-table th {
+  color: var(--v2-muted);
+  font-weight: 700;
+  background: rgba(11, 20, 34, 0.9);
+}
+
+.bt-trade-table td.positive {
+  color: var(--v2-green);
+}
+
+.bt-trade-table td.negative {
+  color: var(--v2-red);
+}
+
+.bt-empty,
+.bt-loading {
+  color: var(--v2-muted);
+  font-size: 0.84rem;
+}
+
+.bt-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+}
+
 @media (max-width: 1500px) {
-  .v2-main-grid {
+  .v2-main-grid,
+  .bt-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .v2-market-panel,
   .v2-signal-panel,
-  .v2-chat-panel {
+  .v2-chat-panel,
+  .bt-panel {
     height: auto;
   }
 
@@ -1274,7 +1668,8 @@ body {
   .v2-market-split,
   .v2-signal-bottom-grid,
   .v2-ml-layout,
-  .mlv-layout {
+  .mlv-layout,
+  .bt-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1290,7 +1685,13 @@ body {
   }
 
   .v2-pulse-grid,
-  .v2-ml-kpi-grid {
+  .v2-ml-kpi-grid,
+  .bt-stat-grid,
+  .bt-form-grid,
+  .bt-metrics-grid,
+  .bt-result-footer,
+  .bt-strategy-grid,
+  .bt-clause-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1307,7 +1708,13 @@ body {
 
   .v2-main-grid,
   .v2-pulse-grid,
-  .v2-ml-kpi-grid {
+  .v2-ml-kpi-grid,
+  .bt-form-grid,
+  .bt-metrics-grid,
+  .bt-clause-grid,
+  .bt-stat-grid,
+  .bt-strategy-grid,
+  .bt-result-footer {
     grid-template-columns: 1fr;
   }
 
@@ -1326,6 +1733,10 @@ body {
   .mlv-head {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .bt-panel {
+    min-height: auto;
   }
 }
 

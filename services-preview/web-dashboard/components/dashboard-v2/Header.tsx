@@ -53,6 +53,9 @@ export function Header({
           <button type="button" className="v2-icon-btn" onClick={onRefresh} disabled={refreshing} aria-label="Refresh all panels">
             <RefreshCcw size={16} className={refreshing ? "spin" : ""} />
           </button>
+          <a href="/backtest" className="v2-link-btn">
+            Open Backtest Lab
+          </a>
           <a href="/ml-validation" className="v2-link-btn">
             Open ML Deep View
           </a>
