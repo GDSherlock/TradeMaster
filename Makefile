@@ -12,7 +12,7 @@ DB_BATCH_ROWS ?= 10000
 TABLE ?= rsi_14
 INDICATOR_PORT ?= 9102
 
-.PHONY: help init db-init dev dev-data dev-edge dev-web stop status restart backfill live stop-live indicators-once indicators-loop signal-once signal-loop signal api chat dashboard ml-service ml-validate-loop ml-train-once ml-train-loop ml-revalidate-once ml-recalibrate-once ml-drift-check-once ml-monitor-loop ml-report smoke security-check clean
+.PHONY: help init db-init dev dev-data dev-edge dev-web stop status restart backfill live stop-live indicators-once indicators-loop signal-once signal-loop signal api chat dashboard ml-service ml-validate-loop ml-train-once ml-train-loop ml-revalidate-once ml-recalibrate-once ml-drift-check-once ml-monitor-loop ml-report backtest-service backtest-worker smoke security-check clean
 
 help:
 	@echo "TradeCat MVP commands"
@@ -32,6 +32,8 @@ help:
 	@echo "  make signal-loop     - run signal rule engine loop"
 	@echo "  make signal          - run signal REST/WS service only"
 	@echo "  make ml-service      - run ml-validator REST service only"
+	@echo "  make backtest-service - run backtest REST service only"
+	@echo "  make backtest-worker - run backtest async worker only"
 	@echo "  make ml-validate-loop - run ml validation worker loop"
 	@echo "  make ml-train-once   - run ml training once"
 	@echo "  make ml-train-loop   - run ml daily training scheduler"
@@ -126,6 +128,12 @@ ml-drift-check-once:
 
 ml-monitor-loop:
 	@cd services/ml-validator-service && .venv/bin/python -m src monitor-loop
+
+backtest-service:
+	@cd services/backtest-service && .venv/bin/python -m src serve
+
+backtest-worker:
+	@cd services/backtest-service && .venv/bin/python -m src worker
 
 ml-report:
 	@./scripts/ml_report.sh

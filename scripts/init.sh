@@ -10,6 +10,7 @@ SERVICES=(
   "services/chat-service"
   "services/signal-service"
   "services/ml-validator-service"
+  "services/backtest-service"
 )
 
 for svc in "${SERVICES[@]}"; do

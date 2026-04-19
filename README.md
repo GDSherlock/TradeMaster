@@ -18,6 +18,7 @@ Core design choices:
 | Derived indicators | EMA, MACD, RSI, ATR, Bollinger Bands, VWAP, Donchian, Ichimoku in `market_data.indicator_values` | `pipeline-service` writes, `signal-service`, `ml-validator-service`, `api-service`, `chat-service` consume |
 | Rule-based signal events | 12 technical signal rules in `market_data.signal_events` | `signal-service` writes, dashboard/API/ML consume |
 | Shadow ML validation | Probability, decision, training runs, recalibration, drift checks in `signal_ml_*` tables | `ml-validator-service` writes, `api-service` and dashboard consume |
+| Strategy backtest lab | Versioned strategies, async runs, equity curves, trades, and drawdown halt diagnostics | `backtest-service` writes, dashboard consumes |
 | Unified read APIs | REST and WebSocket access to market, indicator, signal, and ML data | `api-service`, `signal-service`, `ml-validator-service` |
 | Dashboard UI | Market overview, signals, indicator views, ML console, chat UI | `services-preview/web-dashboard` |
 | Chat explanation layer | Natural-language market summaries built from live system context | `chat-service` |
@@ -36,6 +37,7 @@ Core design choices:
 | `chat-service` | `8001` | Market-context chat API and audit logging |
 | `signal-service` | `8002` | Signal REST/WS service and rule-engine host |
 | `ml-validator-service` | `8003` | ML runtime, training, drift, and validation service |
+| `backtest-service` | `8004` | Strategy save/version/run service plus async backtest worker |
 | `web-dashboard` | `8088` | Next.js UI and same-origin BFF |
 
 ### End-to-end data flow
@@ -74,6 +76,15 @@ Hugging Face dataset                         Binance Futures UM
           market_data.signal_ml_*
                 |
                 v
+ backtest-service strategy versions + async runs
+                |
+                v
+  market_data.backtest_* + market_data_api.v_backtest_*_v1
+                |
+                v
+        web-dashboard Backtest Lab
+                |
+                v
       market_data_api.v_*_v1 read views
                 |
                 v
@@ -98,14 +109,19 @@ TradeMaster runs as local background processes managed by [`Makefile`](./Makefil
 
 | Group | Processes |
 | --- | --- |
-| `data` | `pipeline-live`, `pipeline-indicator`, `signal-engine`, `ml-validate-loop`, `ml-monitor-loop` |
-| `edge` | `api-service`, `chat-service`, `signal-service`, `ml-validator-service` |
+| `data` | `pipeline-live`, `pipeline-indicator`, `signal-engine`, `ml-validate-loop`, `ml-monitor-loop`, `backtest-worker` |
+| `edge` | `api-service`, `chat-service`, `signal-service`, `ml-validator-service`, `backtest-service` |
 | `web` | `web-dashboard` |
 
 Runtime files:
 - Logs: `logs/`, plus grouped logs under `logs/data/`, `logs/edge/`, and `logs/web/`
 - PID files: `run/pids/`
 - Hugging Face dataset cache: `data/hf/`
+
+Operational note:
+- `make dev` / `./scripts/devctl.sh` is the managed background runtime path for backend services.
+- If you start an edge service manually with commands like `make backtest-service`, `devctl` will not adopt or kill that process.
+- When a managed service port is already occupied, `devctl` now fails fast with PID/command diagnostics instead of overwriting PID files or reporting a false stopped state.
 
 ## Project Structure
 
@@ -118,6 +134,7 @@ Runtime files:
 | `services/pipeline-service/` | Historical backfill, live market ingestion, indicator engine, heartbeat/metrics |
 | `services/signal-service/` | Rule evaluation engine plus signal REST/WS API |
 | `services/ml-validator-service/` | Shadow validation worker, model training, recalibration, drift monitoring, ML REST API |
+| `services/backtest-service/` | Strategy catalog, DSL validation, async backtest worker, run history, equity/trade outputs |
 | `services/api-service/` | Unified REST/WS read layer over versioned DB views |
 | `services/chat-service/` | Chat endpoint, prompt guardrails, context builder, provider integration, audit logging |
 | `services-preview/web-dashboard/` | Next.js dashboard and same-origin BFF for REST/chat requests |
@@ -449,6 +466,7 @@ Optional dashboard runtime overrides are read directly by the Next.js app:
 - [Chat service README](./services/chat-service/README.md)
 - [Signal service README](./services/signal-service/README.md)
 - [ML validator service README](./services/ml-validator-service/README.md)
+- [Backtest service README](./services/backtest-service/README.md)
 - [Web dashboard README](./services-preview/web-dashboard/README.md)
 - [Database README](./db/README.md)
 - [Service dependency matrix](./docs/service_dependency_matrix.md)
