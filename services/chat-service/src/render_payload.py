@@ -18,7 +18,7 @@ _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
 
 
-class DraftDetail(BaseModel):
+class RenderDetailModel(BaseModel):
     thesis: str | None = Field(default=None, max_length=240)
     evidence: list[str] | None = None
     scenario_map: list[str] | None = None
@@ -32,7 +32,7 @@ class ModelDraft(BaseModel):
     action_posture: str | None = Field(default=None, max_length=180)
     risk_flags: list[str] | None = None
     watchpoints: list[str] | None = None
-    expandable_detail: DraftDetail | None = None
+    expandable_detail: RenderDetailModel | None = None
 
 
 class ConfidenceModel(BaseModel):
@@ -50,13 +50,6 @@ class KeyLevelModel(BaseModel):
 class DataQualityModel(BaseModel):
     status: DataQualityStatus
     note: str | None = Field(default=None, max_length=120)
-
-
-class RenderDetailModel(BaseModel):
-    thesis: str | None = Field(default=None, max_length=240)
-    evidence: list[str] | None = None
-    scenario_map: list[str] | None = None
-    ml_context: str | None = Field(default=None, max_length=220)
 
 
 class ChatRenderPayload(BaseModel):
@@ -341,10 +334,15 @@ def build_prompt(
     context_packet = build_context_packet(context, mode, language, stance, confidence, data_quality)
     language_instructions = {
         "en": (
-            "Write in natural, professional trading English. Sound like desk commentary, not a report. "
-            "Use short, clipped sentences. Bottom line first. Avoid consultant phrasing and long list formatting."
+            "Write every user-facing field in natural, professional trading English. "
+            "Sound like desk commentary, not a report. Use short, clipped sentences. "
+            "Bottom line first. Avoid consultant phrasing and long list formatting."
         ),
-        "zh": "默认使用自然、专业、像交易员说话的中文。短句。先说结论。不要写成报告，不要堆符号，不要写成长列表。",
+        "zh": (
+            "Write every user-facing field in natural, professional Simplified Chinese. "
+            "Keep the tone like trader desk commentary, not a report. Use short sentences, "
+            "put the bottom line first, and avoid symbol-heavy or list-heavy wording."
+        ),
     }
     mode_rules = {
         "compact": "Compact mode: title is minimal meta only, summary is one bottom-line sentence, watchpoints max 2 short clauses, no expandable detail.",
@@ -359,10 +357,10 @@ def build_prompt(
             "Return only one valid JSON object. No markdown. No code fences.",
             language_instructions[language],
             mode_rules[mode],
-            "For Chinese replies, summary must be the first sentence the user sees and it must give the bottom line immediately.",
-            "Do not write headings like 结论 / 依据 / 风险 / 下一步 inside any field. The UI will handle structure.",
+            "If the output language is Simplified Chinese, the summary must still be the first sentence the user sees and it must give the bottom line immediately.",
+            "Do not write headings or label prefixes inside any field. Avoid variants such as Conclusion, Rationale, Risk, Next Step, 结论, 依据, 风险, 下一步. The UI will handle structure.",
             "Do not use markdown-heavy formatting, bullet lists, nested lists, or report language.",
-            "Banned phrases: based on the provided data, it is worth noting, overall, 基于给定上下文, 未来X小时最关键观察与失效条件如下, 综合来看, 总体来看, 需要关注的是, 建议谨慎关注, 值得注意的是, 从技术面来看.",
+            "Banned phrases and their translation variants include: based on the provided data, it is worth noting, overall, from a technical perspective, 基于给定上下文, 综合来看, 总体来看, 需要关注的是, 建议谨慎关注, 值得注意的是, 从技术面来看.",
             f"Stance is fixed: {stance}. Confidence band is fixed: {confidence.band}. Confidence reason: {confidence.reason}",
             "title: very short meta only, like BTCUSDT 1h. No pipes, slogans, verdict words, or decorative phrases.",
             "summary: one natural spoken-professional sentence with the bottom line first.",
@@ -504,7 +502,7 @@ def build_fallback_draft(
     detail_line = detail[:180] if detail else None
     detail_payload = None
     if mode == "deep":
-        detail_payload = DraftDetail(
+        detail_payload = RenderDetailModel(
             thesis=detail_line,
             evidence=_trim_list([detail_line] if detail_line else None, 1, 180),
             scenario_map=_trim_list(watchpoints, 2, 100),
