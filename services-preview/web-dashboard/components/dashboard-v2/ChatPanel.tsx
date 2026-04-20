@@ -18,9 +18,9 @@ export function ChatPanel({ messages, pending, context, onSend }: ChatPanelProps
 
   const templates = useMemo(
     () => [
-      `解释 ${context.symbol} ${context.interval} 当前信号是否冲突，并给出判定优先级。`,
-      `基于 ${context.symbol} ${context.interval}，给出保守与激进两套行动方案。`,
-      `列出 ${context.symbol} 接下来 2 小时最关键的观察条件与失效条件。`
+      `Explain whether the current ${context.symbol} ${context.interval} signal is conflicted and rank the confirmation layers.`,
+      `Give me conservative and aggressive trade plans for ${context.symbol} on the ${context.interval}.`,
+      `List the key watch levels and invalidation conditions for ${context.symbol} over the next 2 hours.`
     ],
     [context.interval, context.symbol]
   );

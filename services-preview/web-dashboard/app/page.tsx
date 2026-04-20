@@ -184,7 +184,7 @@ export default function DashboardV2Page() {
     {
       id: "welcome",
       role: "assistant",
-      content: "已连接。直接问我方向、关键位和失效条件就行。",
+      content: "Connected. Ask for direction, key levels, or invalidation conditions.",
       timeLabel: nowLabel()
     }
   ]);

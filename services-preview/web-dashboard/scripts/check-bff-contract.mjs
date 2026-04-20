@@ -77,6 +77,10 @@ function run() {
       schemaKey: "chat_success_v2",
     },
     {
+      file: path.join(CONTRACT_DIR, "snapshots/chat-success-en-v2.json"),
+      schemaKey: "chat_success_v2",
+    },
+    {
       file: path.join(CONTRACT_DIR, "snapshots/error-rate-limited.json"),
       schemaKey: "error_envelope_v1",
     },

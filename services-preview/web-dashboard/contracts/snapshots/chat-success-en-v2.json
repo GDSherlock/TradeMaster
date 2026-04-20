@@ -1,0 +1,39 @@
+{
+  "reply": "Bias stays constructive while 68,400 keeps holding.\n\nWhat matters\nWatch 68,400 first, then see whether 69,200 can extend.\n\nIf this is wrong\nA fast move back below 67,800 would weaken the setup.\n\nNote\nLook for confirmation on a stable retest before leaning harder. Breadth and tape still support continuation.",
+  "session_id": "session-003",
+  "model": "gpt-5.2",
+  "timestamp_ms": 1772710000002,
+  "schema_version": "chat_v2",
+  "mode": "standard",
+  "render_payload": {
+    "version": "chat_v2",
+    "language": "en",
+    "mode": "standard",
+    "title": "BTCUSDT 1h",
+    "stance": "bullish",
+    "confidence": {
+      "band": "high",
+      "reason": "ML validation and live context are aligned.",
+      "score": 0.82
+    },
+    "summary": "Bias stays constructive while 68,400 keeps holding.",
+    "market_context": "Breadth and tape still support continuation.",
+    "action_posture": "Look for confirmation on a stable retest before leaning harder.",
+    "key_levels": [
+      { "kind": "trigger", "label": "Trigger", "value": "68,400.0" },
+      { "kind": "support", "label": "Support", "value": "67,800.0" },
+      { "kind": "resistance", "label": "Resistance", "value": "69,200.0" },
+      { "kind": "invalidation", "label": "Invalidation", "value": "67,800.0" }
+    ],
+    "risk_flags": [
+      "A fast move back below 67,800 would weaken the setup."
+    ],
+    "watchpoints": [
+      "Watch 68,400 first, then see whether 69,200 can extend."
+    ],
+    "data_quality": {
+      "status": "full"
+    },
+    "compliance_note": "Market intelligence only."
+  }
+}
